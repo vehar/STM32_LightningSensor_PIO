@@ -46,6 +46,8 @@ void printAS3935Registers()
     int distance = as3935.lightningDistanceKm();
     int minNumberOfLightnings = as3935.getMinimumLightnings();
     int afe = as3935.getAfe();
+    int trco = as3935.getTRCO();
+    int srco = as3935.getSRCO();
 
     SerialUSB.print("Noise floor is: ");
     SerialUSB.println(noiseFloor, DEC);
@@ -60,10 +62,15 @@ void printAS3935Registers()
     SerialUSB.println(minNumberOfLightnings, DEC);
     SerialUSB.print("afe: ");
     SerialUSB.println(afe, DEC);
+    SerialUSB.print("trco: ");
+    SerialUSB.println(trco, DEC);
+    SerialUSB.print("srco: ");
+    SerialUSB.println(srco, DEC);
 }
 
 void handleLightning() { AS3935IrqTriggered = 1; }
 
+// TODO test calibration by OSC
 void setup()
 {
     pinMode(LED_PIN, OUTPUT);
@@ -87,7 +94,7 @@ void setup()
     if (!display.begin(SSD1306_SWITCHCAPVCC, OLED_ADDR))
     {
         SerialUSB.println(F("SSD1306 allocation failed"));
-        for (;;)
+        while (1)
             ;
     }
 
@@ -98,7 +105,7 @@ void setup()
     display.setTextSize(1);
     display.setTextColor(SSD1306_WHITE);
     display.setCursor(0, 0);
-    display.println(F("Hello, STM32!"));
+    display.println(F("Lightning sensor!"));
     display.display();
 
     SerialUSB.println(F("Display initialized and message displayed."));
@@ -111,17 +118,20 @@ void setup()
             ;
     }
 
+    as3935.reset();
+    printAS3935Registers();
+
     if (!as3935.calibrate())
     {
-        SerialUSB.println(
-            "Tuning out of range, check your wiring, your sensor and make sure physics laws have "
-            "not changed!");
+        SerialUSB.println("Tuning out of range, check your wiring, your sensor!");
     }
 
     // as3935.powerUp();
-    as3935.setIndoors();
-    as3935.disableDisturbers();
-    as3935.setNoiseFloor(3);
+
+    as3935.setOutdoors();
+    as3935.enableDisturbers();
+    as3935.setNoiseFloor(1);
+    as3935.setMinimumLightnings(0);
 
     printAS3935Registers();
     AS3935IrqTriggered = 0;
@@ -171,8 +181,6 @@ void loop()
             }
         }
     }
-
-    // scanI2CDevices();
 }
 
 void scanI2CDevices()

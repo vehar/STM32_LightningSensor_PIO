@@ -48,11 +48,14 @@ byte AS3935::_rawRegisterRead(byte reg)
 {
     if (_wire)
     {
+        byte data = 0;
         _wire->beginTransmission(_address);
         _wire->write(reg);
-        _wire->endTransmission();
+        _wire->endTransmission(false); // REstart
         _wire->requestFrom(_address, (uint8_t)1);
-        return _wire->read();
+        data = _wire->read();
+        _wire->endTransmission();
+        return data;
     }
     else
     {
@@ -115,7 +118,7 @@ void AS3935::reset()
     }
     delay(2);
 }
-
+// TODO Rewrite !?
 bool AS3935::calibrate()
 {
     int target = 3125, currentcount = 0, bestdiff = INT_MAX, currdiff = 0;
@@ -127,8 +130,11 @@ bool AS3935::calibrate()
     // and since we are counting for 100ms that translates to number 3125
     // each capacitor changes second least significant digit
     // using this timing so this is probably the best way to go
+
     registerWrite(AS3935_LCO_FDIV, 0);
     registerWrite(AS3935_DISP_LCO, 1);
+    //registerWrite(AS3935_DISP_SRCO, 1); //1.24MHz
+    //registerWrite(AS3935_DISP_TRCO, 1); //34.1kHz
     // tuning is not linear, can't do any shortcuts here
     // going over all built-in cap values and finding the best
     for (currTune = 0; currTune <= 0x0F; currTune++)
@@ -163,6 +169,7 @@ bool AS3935::calibrate()
     registerWrite(AS3935_DISP_LCO, 0);
     // and now do RCO calibration
     powerUp();
+    delay(500);
     // if error is over 109, we are outside allowed tuning range of +/-3.5%
     return bestdiff > 109 ? false : true;
 }
@@ -175,7 +182,7 @@ void AS3935::powerUp()
     if (_wire)
     {
         _wire->beginTransmission(_address);
-        _wire->write(0x3D);
+        _wire->write(0x3D); //CALIB_RCO
         _wire->write(0x96);
         _wire->endTransmission();
     }
@@ -183,7 +190,10 @@ void AS3935::powerUp()
     {
         _SPITransfer2(0x3D, 0x96);
     }
+
+    registerWrite(AS3935_DISP_SRCO, 1);
     delay(3);
+    registerWrite(AS3935_DISP_SRCO, 0);
 }
 
 int AS3935::interruptSource() { return registerRead(AS3935_INT); }
@@ -225,6 +235,10 @@ int AS3935::setSpikeRejection(int srej)
 }
 
 int AS3935::getWatchdogThreshold() { return registerRead(AS3935_WDTH); }
+
+int AS3935::getTRCO() { return registerRead(AS3935_TRCO); }
+
+int AS3935::getSRCO() { return registerRead(AS3935_SRCO); }
 
 int AS3935::setWatchdogThreshold(int wdth)
 {

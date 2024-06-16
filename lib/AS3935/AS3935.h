@@ -28,6 +28,8 @@
 #define AS3935_DISP_SRCO 0x08, 0x40
 #define AS3935_DISP_TRCO 0x08, 0x20
 #define AS3935_TUN_CAP 0x08, 0x0F
+#define AS3935_TRCO 0x3A, 0xFF
+#define AS3935_SRCO 0x3B, 0xFF
 
 // other constants
 #define AS3935_AFE_INDOOR 0x12
@@ -72,6 +74,8 @@ public:
     int getWatchdogThreshold();
     int setWatchdogThreshold(int wdth);
     void clearStats();
+    int getTRCO();
+    int getSRCO();
 
 private:
     // SPI-related variables

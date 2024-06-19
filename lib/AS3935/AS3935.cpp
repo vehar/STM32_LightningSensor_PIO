@@ -125,12 +125,18 @@ bool AS3935::calibrate()
     byte bestTune = 0, currTune = 0;
     unsigned long setUpTime;
     int currIrq, prevIrq;
+
+    registerWrite(AS3935_DISP_TRCO, 1); //34.1kHz
+    registerWrite(AS3935_DISP_TRCO, 0); //34.1kHz
+
+    registerWrite(AS3935_DISP_SRCO, 1); //1.24MHz
+    registerWrite(AS3935_DISP_SRCO, 0); //1.24MHz
+
     // set lco_fdiv divider to 0, which translates to 16
     // so we are looking for 31250Hz on irq pin
     // and since we are counting for 100ms that translates to number 3125
     // each capacitor changes second least significant digit
     // using this timing so this is probably the best way to go
-
     registerWrite(AS3935_LCO_FDIV, 0);
     registerWrite(AS3935_DISP_LCO, 1);
     //registerWrite(AS3935_DISP_SRCO, 1); //1.24MHz

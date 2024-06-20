@@ -23,6 +23,9 @@
 #define AS3935_LCO_FDIV 0x03, 0xC0
 #define AS3935_MASK_DIST 0x03, 0x20
 #define AS3935_INT 0x03, 0x0F
+#define AS3935_ENERGY_1 0x04, 0xFF
+#define AS3935_ENERGY_2 0x05, 0xFF
+#define AS3935_ENERGY_3 0x06, 0x1F
 #define AS3935_DISTANCE 0x07, 0x3F
 #define AS3935_DISP_LCO 0x08, 0x80
 #define AS3935_DISP_SRCO 0x08, 0x40
@@ -30,6 +33,9 @@
 #define AS3935_TUN_CAP 0x08, 0x0F
 #define AS3935_TRCO 0x3A, 0xFF
 #define AS3935_SRCO 0x3B, 0xFF
+
+#define PRESET_DEFAULT 0x3C, 0xFF
+#define CALIB_RCO 0x3D, 0xFF
 
 // other constants
 #define AS3935_AFE_INDOOR 0x12
@@ -76,6 +82,11 @@ public:
     void clearStats();
     int getTRCO();
     int getSRCO();
+
+    int getTuneCapVal();
+    void setTuneCapVal(byte val);
+    void setDefaults();
+    long lightningEnergy();
 
 private:
     // SPI-related variables

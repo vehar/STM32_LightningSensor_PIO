@@ -22,6 +22,7 @@ bool AS3935::begin()
     if (_wire)
     {
         _wire->begin();
+        _wire->setClock(400000);
         // Additional I2C initialization if needed
         return true;
     }
@@ -126,11 +127,11 @@ bool AS3935::calibrate()
     unsigned long setUpTime;
     int currIrq, prevIrq;
 
-    registerWrite(AS3935_DISP_TRCO, 1); //34.1kHz
-    registerWrite(AS3935_DISP_TRCO, 0); //34.1kHz
+    // registerWrite(AS3935_DISP_TRCO, 1); // 34.1kHz
+    // registerWrite(AS3935_DISP_TRCO, 0); // 34.1kHz
 
-    registerWrite(AS3935_DISP_SRCO, 1); //1.24MHz
-    registerWrite(AS3935_DISP_SRCO, 0); //1.24MHz
+    // registerWrite(AS3935_DISP_SRCO, 1); // 1.24MHz
+    // registerWrite(AS3935_DISP_SRCO, 0); // 1.24MHz
 
     // set lco_fdiv divider to 0, which translates to 16
     // so we are looking for 31250Hz on irq pin
@@ -139,10 +140,9 @@ bool AS3935::calibrate()
     // using this timing so this is probably the best way to go
     registerWrite(AS3935_LCO_FDIV, 0);
     registerWrite(AS3935_DISP_LCO, 1);
-    //registerWrite(AS3935_DISP_SRCO, 1); //1.24MHz
-    //registerWrite(AS3935_DISP_TRCO, 1); //34.1kHz
-    // tuning is not linear, can't do any shortcuts here
-    // going over all built-in cap values and finding the best
+
+    //  tuning is not linear, can't do any shortcuts here
+    //  going over all built-in cap values and finding the best
     for (currTune = 0; currTune <= 0x0F; currTune++)
     {
         registerWrite(AS3935_TUN_CAP, currTune);
@@ -175,7 +175,6 @@ bool AS3935::calibrate()
     registerWrite(AS3935_DISP_LCO, 0);
     // and now do RCO calibration
     powerUp();
-    delay(500);
     // if error is over 109, we are outside allowed tuning range of +/-3.5%
     return bestdiff > 109 ? false : true;
 }
@@ -188,7 +187,7 @@ void AS3935::powerUp()
     if (_wire)
     {
         _wire->beginTransmission(_address);
-        _wire->write(0x3D); //CALIB_RCO
+        _wire->write(0x3D); // CALIB_RCO
         _wire->write(0x96);
         _wire->endTransmission();
     }
@@ -198,7 +197,7 @@ void AS3935::powerUp()
     }
 
     registerWrite(AS3935_DISP_SRCO, 1);
-    delay(3);
+    delay(2);
     registerWrite(AS3935_DISP_SRCO, 0);
 }
 
@@ -207,6 +206,8 @@ int AS3935::interruptSource() { return registerRead(AS3935_INT); }
 void AS3935::disableDisturbers() { registerWrite(AS3935_MASK_DIST, 1); }
 
 void AS3935::enableDisturbers() { registerWrite(AS3935_MASK_DIST, 0); }
+
+void AS3935::setDefaults() { registerWrite(PRESET_DEFAULT, 0x96); }
 
 int AS3935::getMinimumLightnings() { return registerRead(AS3935_MIN_NUM_LIGH); }
 
@@ -223,6 +224,10 @@ void AS3935::setIndoors() { registerWrite(AS3935_AFE_GB, AS3935_AFE_INDOOR); }
 void AS3935::setOutdoors() { registerWrite(AS3935_AFE_GB, AS3935_AFE_OUTDOOR); }
 
 int AS3935::getAfe() { return registerRead(AS3935_AFE_GB); }
+
+int AS3935::getTuneCapVal() { return registerRead(AS3935_TUN_CAP); }
+
+void AS3935::setTuneCapVal(byte val) { registerWrite(AS3935_TUN_CAP, val); }
 
 int AS3935::getNoiseFloor() { return registerRead(AS3935_NF_LEV); }
 
@@ -257,4 +262,24 @@ void AS3935::clearStats()
     registerWrite(AS3935_CL_STAT, 1);
     registerWrite(AS3935_CL_STAT, 0);
     registerWrite(AS3935_CL_STAT, 1);
+}
+
+long AS3935::lightningEnergy()
+{
+    long v = 0;
+    char bits8[4];
+
+    // Energy_u e;
+    // REG_u reg4, reg5, reg6;
+
+    char err;
+
+    bits8[3] = 0;
+    bits8[2] = registerRead(AS3935_ENERGY_3);
+    bits8[1] = registerRead(AS3935_ENERGY_2);
+    bits8[0] = registerRead(AS3935_ENERGY_1);
+
+    v = bits8[2] * 65536 + bits8[1] * 256 + bits8[0];
+
+    return v;
 }

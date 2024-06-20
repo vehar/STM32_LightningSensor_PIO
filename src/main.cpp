@@ -14,7 +14,7 @@ SDA -> PB7
 #define OLED_ADDR 0x3C
 #define LED_PIN PC13
 
-#define AS3935_IRQ_PIN PA1
+#define AS3935_IRQ_PIN PB1
 #define AS3935_I2C_ADDR 0x01
 
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
@@ -38,6 +38,42 @@ void displayLightningInfo(uint8_t dist)
     display.display();
 }
 
+void displayAS3935Registers() {
+    int noiseFloor = as3935.getNoiseFloor();
+    int spikeRejection = as3935.getSpikeRejection();
+    int watchdogThreshold = as3935.getWatchdogThreshold();
+    int distance = as3935.lightningDistanceKm();
+    int minNumberOfLightnings = as3935.getMinimumLightnings();
+    int afe = as3935.getAfe();
+    int trco = as3935.getTRCO();
+    int srco = as3935.getSRCO();
+    int capVal = as3935.getTuneCapVal();
+
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setTextColor(SSD1306_WHITE);
+    display.setCursor(0, 0);
+    display.print("Noise: ");
+    display.print(noiseFloor);
+    display.print(" Spike: ");
+    display.println(spikeRejection);
+    display.print("Watchdog: ");
+    display.println(watchdogThreshold);
+    display.print("Distance: ");
+    display.println(distance);
+    display.print("Min Light: ");
+    display.println(minNumberOfLightnings);
+    display.print("AFE: ");
+    display.println(afe);
+    display.print("TRCO: ");
+    display.print(trco);
+    display.print(" SRCO: ");
+    display.println(srco);
+    display.print("CapVal: ");
+    display.println(capVal);
+    display.display();
+}
+
 void printAS3935Registers()
 {
     int noiseFloor = as3935.getNoiseFloor();
@@ -48,6 +84,7 @@ void printAS3935Registers()
     int afe = as3935.getAfe();
     int trco = as3935.getTRCO();
     int srco = as3935.getSRCO();
+    int capVal = as3935.getTuneCapVal();
 
     SerialUSB.print("Noise floor is: ");
     SerialUSB.println(noiseFloor, DEC);
@@ -66,6 +103,8 @@ void printAS3935Registers()
     SerialUSB.println(trco, DEC);
     SerialUSB.print("srco: ");
     SerialUSB.println(srco, DEC);
+    SerialUSB.print("capVal: ");
+    SerialUSB.println(capVal, DEC);
 }
 
 void handleLightning() { AS3935IrqTriggered = 1; }
@@ -99,7 +138,7 @@ void setup()
     }
 
     display.display();
-    delay(2000); // Pause for 2 seconds
+    delay(1000); // Pause for 2 seconds
 
     display.clearDisplay();
     display.setTextSize(1);
@@ -120,20 +159,23 @@ void setup()
 
     as3935.reset();
     printAS3935Registers();
-
-    if (!as3935.calibrate())
-    {
-        SerialUSB.println("Tuning out of range, check your wiring, your sensor!");
-    }
-
-    // as3935.powerUp();
+    displayAS3935Registers();
+   // as3935.powerUp();
 
     as3935.setOutdoors();
     as3935.enableDisturbers();
     as3935.setNoiseFloor(1);
     as3935.setMinimumLightnings(0);
 
+    if (!as3935.calibrate())
+        SerialUSB.println("Tuning out of range, check your wiring, your sensor!");
+    else
+        SerialUSB.println("Calibration done!");
+
+    delay(2000);
     printAS3935Registers();
+    displayAS3935Registers();
+
     AS3935IrqTriggered = 0;
 
     attachInterrupt(digitalPinToInterrupt(AS3935_IRQ_PIN), handleLightning, RISING);
@@ -143,13 +185,14 @@ void setup()
 
 void loop()
 {
-    digitalWrite(LED_PIN, LOW); // Turn the LED on
-    delay(500);
+    //digitalWrite(LED_PIN, LOW); // Turn the LED on
+    delay(100);
     digitalWrite(LED_PIN, HIGH); // Turn the LED off
-    delay(500);
+    delay(100);
 
     if (AS3935IrqTriggered)
     {
+        digitalWrite(LED_PIN, LOW); // Turn the LED on
         AS3935IrqTriggered = 0;
 
         int irqSource = as3935.interruptSource();
@@ -164,6 +207,8 @@ void loop()
         if (irqSource & 0x08)
         {
             int distance = as3935.lightningDistanceKm();
+            long energy = as3935.lightningEnergy();
+
             if (distance == 1)
             {
                 SerialUSB.println("Storm overhead, watch out!");
@@ -177,8 +222,14 @@ void loop()
                 SerialUSB.print("Lightning detected ");
                 SerialUSB.print(distance);
                 SerialUSB.println(" kilometers away.");
+                SerialUSB.print(energy);
+                SerialUSB.println(" energy of 2 097 151");
                 displayLightningInfo(distance);
             }
+        }
+        else
+        {
+            SerialUSB.println("Dummy interrupt ");
         }
     }
 }

@@ -89,13 +89,9 @@ void setup()
     as3935.setMinimumLightnings(0);
 
     if (!as3935.calibrate())
-    {
         SerialUSB.println("Tuning out of range, check your wiring, your sensor!");
-    }
     else
-    {
         SerialUSB.println("Calibration done!");
-    }
 
     delay(2000);
     regs = getAS3935Registers();
@@ -109,6 +105,37 @@ void setup()
     delay(2000);
     displayLightningInfo(50, 2000000);
     delay(2000);
+}
+
+void handleNoiseInterrupt()
+{
+    SerialUSB.println("Noise level too high, try adjusting noise floor");
+}
+
+void handleDisturberInterrupt() { SerialUSB.println("Disturber detected"); }
+
+void handleLightningInterrupt()
+{
+    int distance = as3935.lightningDistanceKm();
+    long energy = as3935.lightningEnergy();
+
+    if (distance == 1)
+    {
+        SerialUSB.println("Storm overhead, watch out!");
+    }
+    else if (distance == 63)
+    {
+        SerialUSB.println("Out of range lightning detected.");
+    }
+    else
+    {
+        SerialUSB.print("Lightning detected ");
+        SerialUSB.print(distance);
+        SerialUSB.println(" kilometers away.");
+        SerialUSB.print(energy);
+        SerialUSB.println(" energy of 2 097 151");
+        displayLightningInfo(distance, energy);
+    }
 }
 
 void loop()
@@ -125,34 +152,15 @@ void loop()
         int irqSource = as3935.interruptSource();
         if (irqSource & 0x01)
         {
-            SerialUSB.println("Noise level too high, try adjusting noise floor");
+            handleNoiseInterrupt();
         }
-        if (irqSource & 0x04)
+        else if (irqSource & 0x04)
         {
-            SerialUSB.println("Disturber detected");
+            handleDisturberInterrupt();
         }
-        if (irqSource & 0x08)
+        else if (irqSource & 0x08)
         {
-            int distance = as3935.lightningDistanceKm();
-            long energy = as3935.lightningEnergy();
-
-            if (distance == 1)
-            {
-                SerialUSB.println("Storm overhead, watch out!");
-            }
-            else if (distance == 63)
-            {
-                SerialUSB.println("Out of range lightning detected.");
-            }
-            else
-            {
-                SerialUSB.print("Lightning detected ");
-                SerialUSB.print(distance);
-                SerialUSB.println(" kilometers away.");
-                SerialUSB.print(energy);
-                SerialUSB.println(" energy of 2 097 151");
-                displayLightningInfo(distance, energy);
-            }
+            handleLightningInterrupt();
         }
         else
         {
@@ -209,21 +217,22 @@ void displayMessage(const String &message, int textSize)
 
 void displayLightningInfo(uint8_t dist, long energy)
 {
+    long persent = (energy * 100) / 2097151;
     display.clearDisplay();
-    display.setTextSize(2);
-    display.setTextColor(SSD1306_WHITE);
-    display.setCursor(0, 0);
-    display.print("Lightning");
+
+    displayMessage("Lightning", 2);
+
     display.setTextSize(1);
     display.setCursor(0, 20);
-    display.print("Dist: ");
+    display.print("L: ");
     display.print(dist);
-    display.print(" km");
+    display.print(" km; ");
     display.setCursor(0, 30);
-    display.print("Energy: ");
+    display.print("E: ");
     display.print(energy);
-    display.setCursor(0, 40);
-    display.print("Of 2097151");
+    display.print(" = ");
+    display.print(persent);
+    display.print(" %");
     display.display();
 }
 
@@ -271,22 +280,20 @@ void displayAS3935Registers(AS3935Registers regs)
 
 void printAS3935Registers(AS3935Registers regs)
 {
-    SerialUSB.print("Noise floor is: ");
-    SerialUSB.println(regs.noiseFloor, DEC);
-    SerialUSB.print("Spike rejection is: ");
-    SerialUSB.println(regs.spikeRejection, DEC);
-    SerialUSB.print("Watchdog threshold is: ");
-    SerialUSB.println(regs.watchdogThreshold, DEC);
-    SerialUSB.print("lightningDistanceKm: ");
-    SerialUSB.println(regs.distance, DEC);
-    SerialUSB.print("minNumberOfLightnings: ");
-    SerialUSB.println(regs.minNumberOfLightnings, DEC);
-    SerialUSB.print("afe: ");
-    SerialUSB.println(regs.afe, DEC);
-    SerialUSB.print("trco: ");
-    SerialUSB.println(regs.trco, DEC);
-    SerialUSB.print("srco: ");
-    SerialUSB.println(regs.srco, DEC);
-    SerialUSB.print("capVal: ");
-    SerialUSB.println(regs.capVal, DEC);
+    char buffer[512]; // Adjust size as needed
+
+    sprintf(buffer,
+            "Noise floor is:         %d\n"
+            "Spike rejection is:     %d\n"
+            "Watchdog threshold is:  %d\n"
+            "Lightning Distance Km:  %d\n"
+            "Min Lightnings:         %d\n"
+            "AFE:                    %d\n"
+            "TRCO:                   %d\n"
+            "SRCO:                   %d\n"
+            "CapVal:                 %d\n",
+            regs.noiseFloor, regs.spikeRejection, regs.watchdogThreshold, regs.distance,
+            regs.minNumberOfLightnings, regs.afe, regs.trco, regs.srco, regs.capVal);
+
+    SerialUSB.print(buffer);
 }

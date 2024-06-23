@@ -17,6 +17,7 @@ AS3935::AS3935(TwoWire &wire, int irq, uint8_t address)
 }
 
 // Initialization function
+// DS https://www.sciosense.com/wp-content/uploads/2024/01/AS3935-Datasheet.pdf
 bool AS3935::begin()
 {
     if (_wire)
@@ -211,6 +212,7 @@ void AS3935::setDefaults() { registerWrite(PRESET_DEFAULT, 0x96); }
 
 int AS3935::getMinimumLightnings() { return registerRead(AS3935_MIN_NUM_LIGH); }
 
+// 2 bits
 int AS3935::setMinimumLightnings(int minlightning)
 {
     registerWrite(AS3935_MIN_NUM_LIGH, minlightning);
@@ -231,6 +233,7 @@ void AS3935::setTuneCapVal(byte val) { registerWrite(AS3935_TUN_CAP, val); }
 
 int AS3935::getNoiseFloor() { return registerRead(AS3935_NF_LEV); }
 
+// 3 bits
 int AS3935::setNoiseFloor(int noisefloor)
 {
     registerWrite(AS3935_NF_LEV, noisefloor);
@@ -239,6 +242,7 @@ int AS3935::setNoiseFloor(int noisefloor)
 
 int AS3935::getSpikeRejection() { return registerRead(AS3935_SREJ); }
 
+// 4 bits
 int AS3935::setSpikeRejection(int srej)
 {
     registerWrite(AS3935_SREJ, srej);
@@ -251,6 +255,7 @@ int AS3935::getTRCO() { return registerRead(AS3935_TRCO); }
 
 int AS3935::getSRCO() { return registerRead(AS3935_SRCO); }
 
+// 4 bits
 int AS3935::setWatchdogThreshold(int wdth)
 {
     registerWrite(AS3935_WDTH, wdth);

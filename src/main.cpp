@@ -13,20 +13,28 @@
 #define AS3935_IRQ_PIN PB5
 #define AS3935_I2C_ADDR 0x01
 
-#define DATA_POINTS 60
-#define ENERGY_SCALE_FACTOR 1000
+#define DATA_POINTS 55
 #define MAX_ENERGY 2097151
-#define HISTOGRAM_HEIGHT 12 // Height of each histogram section
+#define HISTOGRAM_HEIGHT 14 // Height of each histogram section
 
-uint8_t noiseCounts[DATA_POINTS] = { 0 };
-uint8_t disturberCounts[DATA_POINTS] = { 0 };
-uint8_t lightningCounts[DATA_POINTS] = { 0 };
-uint8_t lightningDistances[DATA_POINTS] = { 0 };
-uint8_t lightningEnergies[DATA_POINTS] = { 0 };
+struct TimeInfo
+{
+    unsigned long hours;
+    unsigned long minutes;
+    unsigned long seconds;
+};
 
-unsigned long startTime = 0;
-unsigned long lastUpdateTime = 0;
-unsigned long uptimeSeconds = 0;
+struct MeasurementData
+{
+    uint8_t noise;
+    uint8_t disturber;
+    uint8_t lightningCount;
+    uint8_t lightningDistance;
+    uint8_t lightningEnergy;
+};
+
+MeasurementData data[DATA_POINTS];
+TimeInfo currentTimeInfo = { 0, 0, 0 };
 
 struct AS3935Registers
 {
@@ -47,7 +55,7 @@ struct LightningInfo
     uint8_t min;
     uint8_t sec;
     uint8_t distance;
-    uint8_t energyPersent;
+    uint8_t energyPercent;
 };
 
 LightningInfo spikeInfo;
@@ -58,10 +66,12 @@ AS3935 as3935(Wire, AS3935_IRQ_PIN, AS3935_I2C_ADDR);
 void handleLightning();
 volatile int AS3935IrqTriggered = 0;
 
+bool lightningDetected = false;
+
 void setup();
 void loop();
 void scanI2CDevices();
-void displayMessage(const String &message, int textSize, bool emidiateUpdate = true);
+void displayMessage(const String &message, int textSize, bool immediateUpdate = true);
 void displayLightningInfo(uint8_t dist, long energy, uint8_t percent);
 AS3935Registers getAS3935Registers();
 void printAS3935Registers(AS3935Registers regs);
@@ -70,7 +80,7 @@ void handleDisturberInterrupt(int index);
 void handleLightningInterrupt(int index);
 void collectData(int index);
 void updateDisplay();
-void normalizeData(uint8_t *data, uint8_t length, uint8_t maxValue);
+void normalizeData(uint8_t *data, uint8_t length, uint8_t maxValue, uint8_t &maxDataValue);
 
 void setup()
 {
@@ -112,8 +122,10 @@ void setup()
 
     as3935.setOutdoors();
     as3935.enableDisturbers();
-    as3935.setNoiseFloor(1);
+    as3935.setNoiseFloor(5);
     as3935.setMinimumLightnings(0);
+    as3935.setSpikeRejection(0);
+    as3935.setWatchdogThreshold(0);
 
     if (!as3935.calibrate())
     {
@@ -124,7 +136,7 @@ void setup()
         SerialUSB.println("Calibration done!");
     }
 
-    delay(2000);
+    delay(1000);
     regs = getAS3935Registers();
     printAS3935Registers(regs);
 
@@ -133,40 +145,38 @@ void setup()
     SerialUSB.println("AS3935 initialized and ready.");
 
     // displayLightningInfo(42, 2000000, 99);
-    delay(3000);
-
-    startTime = millis();
-    lastUpdateTime = millis();
+    delay(1000);
 }
 
 void handleNoiseInterrupt(int index)
 {
-    noiseCounts[index]++;
+    data[index].noise++;
     SerialUSB.println("Noise level too high, try adjusting noise floor");
 }
 
 void handleDisturberInterrupt(int index)
 {
-    disturberCounts[index]++;
+    data[index].disturber++;
     SerialUSB.println("Disturber detected");
 }
 
 void handleLightningInterrupt(int index)
 {
+    lightningDetected = true;
     int distance = as3935.lightningDistanceKm();
     long energy = as3935.lightningEnergy();
 
     spikeInfo.distance = distance;
-    spikeInfo.energyPersent = (energy * 100) / MAX_ENERGY;
-    spikeInfo.sec = uptimeSeconds % 60;
-    spikeInfo.min = (uptimeSeconds / 60) % 60;
-    spikeInfo.hour = (uptimeSeconds / 3600);
+    spikeInfo.energyPercent = (energy * 100) / MAX_ENERGY;
+    spikeInfo.sec = currentTimeInfo.seconds;
+    spikeInfo.min = currentTimeInfo.minutes;
+    spikeInfo.hour = currentTimeInfo.hours;
 
-    lightningCounts[index]++;
-    lightningDistances[index] = distance;
-    lightningEnergies[index] = spikeInfo.energyPersent;
+    data[index].lightningCount++;
+    data[index].lightningDistance = distance;
+    data[index].lightningEnergy = spikeInfo.energyPercent;
 
-    displayLightningInfo(distance, energy, spikeInfo.energyPersent);
+    displayLightningInfo(distance, energy, spikeInfo.energyPercent);
 
     if (distance == 1)
         SerialUSB.println("Storm overhead, watch out!");
@@ -179,6 +189,7 @@ void loop()
     static int index = 0;
     static unsigned long lastDataCollectionTime = 0;
     static unsigned long lastDisplayUpdateTime = 0;
+    static unsigned long lastDetectedTime = 0;
 
     unsigned long currentTime = millis();
 
@@ -192,10 +203,44 @@ void loop()
     // Update display every 1000 milliseconds
     if (currentTime - lastDisplayUpdateTime >= 1000)
     {
-        uptimeSeconds++;
-        index = (index + 1) % DATA_POINTS;
-        updateDisplay();
+        currentTimeInfo.seconds++;
+        if (currentTimeInfo.seconds >= 60)
+        {
+            currentTimeInfo.seconds = 0;
+            currentTimeInfo.minutes++;
+            if (currentTimeInfo.minutes >= 60)
+            {
+                currentTimeInfo.minutes = 0;
+                currentTimeInfo.hours++;
+            }
+        }
+
+        // Accumulate and display cyclic
+        // index = (index + 1) % DATA_POINTS;
+
+        // OR
+        // Shift data to the right
+        for (int i = DATA_POINTS - 1; i > 0; i--)
+            data[i] = data[i - 1];
+
+        data[0] = { 0, 0, 0, 0, 0 }; // Clear the first element
+
+        if (lightningDetected == false)
+            updateDisplay();
+
         lastDisplayUpdateTime = currentTime;
+    }
+
+    if (lightningDetected)
+    {
+        if (lastDetectedTime == 0)
+            lastDetectedTime = currentTime;
+
+        if (currentTime - lastDetectedTime >= 5000)
+        {
+            lightningDetected = false;
+            lastDetectedTime = 0;
+        }
     }
 }
 
@@ -221,18 +266,32 @@ void collectData(int index)
     }
 }
 
-void normalizeData(uint8_t *data, uint8_t length, uint8_t maxValue)
+void normalizeData(uint8_t *data, uint8_t length, uint8_t maxValue, uint8_t &maxDataValue)
 {
-    uint8_t maxData = 0;
+    maxDataValue = 0;
     for (uint8_t i = 0; i < length; i++)
     {
-        if (data[i] > maxData)
-            maxData = data[i];
+        if (data[i] > maxDataValue)
+            maxDataValue = data[i];
     }
     for (uint8_t i = 0; i < length; i++)
     {
-        data[i] = (data[i] * maxValue) / maxData;
+        data[i] = (data[i] * maxValue) / maxDataValue;
     }
+}
+
+void drawHistogramSection(uint8_t *data, int yStart, int line)
+{
+    int yOffset = HISTOGRAM_HEIGHT * line;
+    for (int i = 0; i < DATA_POINTS; i++)
+        display.drawLine(i * 2, yStart + yOffset, i * 2, yStart + yOffset - data[i], SSD1306_WHITE);
+}
+
+void printMaxValue(int maxValue, int yStart, int line)
+{
+    int yPosition = yStart + HISTOGRAM_HEIGHT * line - HISTOGRAM_HEIGHT;
+    display.setCursor(SCREEN_WIDTH - 15, yPosition);
+    display.printf("%d", maxValue);
 }
 
 void updateDisplay()
@@ -240,83 +299,97 @@ void updateDisplay()
     display.clearDisplay();
 
     // Draw uptime
-    unsigned long seconds = uptimeSeconds % 60;
-    unsigned long minutes = (uptimeSeconds / 60) % 60;
-    unsigned long hours = (uptimeSeconds / 3600);
-
     char buffer[128]; // Display uptime
 
-    sprintf(buffer, "T:%02lu:%02lu:%02lu L%dkm E%d%%\n", hours, minutes, seconds,
-            spikeInfo.distance, spikeInfo.energyPersent);
+    sprintf(buffer, "%02lu:%02lu:%02lu L %dkm E %d%%\n", currentTimeInfo.hours,
+            currentTimeInfo.minutes, currentTimeInfo.seconds, spikeInfo.distance,
+            spikeInfo.energyPercent);
 
     displayMessage(buffer, 1, false);
 
-    // Normalize data
-    normalizeData(noiseCounts, DATA_POINTS, HISTOGRAM_HEIGHT);
-    normalizeData(disturberCounts, DATA_POINTS, HISTOGRAM_HEIGHT);
-    normalizeData(lightningDistances, DATA_POINTS, HISTOGRAM_HEIGHT);
-    normalizeData(lightningEnergies, DATA_POINTS, HISTOGRAM_HEIGHT);
+    uint8_t maxNoise, maxDisturber, maxDistance, maxEnergy;
+    uint8_t noiseCounts[DATA_POINTS];
+    uint8_t disturberCounts[DATA_POINTS];
+    uint8_t lightningDistances[DATA_POINTS];
+    uint8_t lightningEnergies[DATA_POINTS];
 
-    // Draw histograms
-    int y = 20;
+    // Collect raw data
     for (int i = 0; i < DATA_POINTS; i++)
     {
-        // Noise
-        display.drawLine(i * 2, y, i * 2, y - noiseCounts[i], SSD1306_WHITE);
-        // Disturber
-        display.drawLine(i * 2, y + HISTOGRAM_HEIGHT, i * 2,
-                         y + HISTOGRAM_HEIGHT - disturberCounts[i], SSD1306_WHITE);
-        // Lightning (distance and energy)
-        display.drawLine(i * 2, y + HISTOGRAM_HEIGHT * 2, i * 2,
-                         y + HISTOGRAM_HEIGHT * 2 - lightningDistances[i], SSD1306_WHITE);
-        display.drawLine(i * 2, y + HISTOGRAM_HEIGHT * 3, i * 2,
-                         y + HISTOGRAM_HEIGHT * 3 - lightningEnergies[i], SSD1306_WHITE);
+        noiseCounts[i] = data[i].noise;
+        disturberCounts[i] = data[i].disturber;
+        lightningDistances[i] = data[i].lightningDistance;
+        lightningEnergies[i] = data[i].lightningEnergy;
     }
+
+    // Normalize data
+    normalizeData(lightningDistances, DATA_POINTS, HISTOGRAM_HEIGHT, maxDistance);
+    normalizeData(lightningEnergies, DATA_POINTS, HISTOGRAM_HEIGHT, maxEnergy);
+    normalizeData(disturberCounts, DATA_POINTS, HISTOGRAM_HEIGHT, maxDisturber);
+    normalizeData(noiseCounts, DATA_POINTS, HISTOGRAM_HEIGHT, maxNoise);
+
+    // Draw histograms
+    int y = 21;
+    drawHistogramSection(lightningDistances, y, 0);
+    drawHistogramSection(lightningEnergies, y, 1);
+    drawHistogramSection(disturberCounts, y, 2);
+    drawHistogramSection(noiseCounts, y, 3);
+
+    y += 5;
+    // Display max values
+    printMaxValue(maxDistance, y, 0);
+    printMaxValue(maxEnergy, y, 1);
+    printMaxValue(maxDisturber, y, 2);
+    printMaxValue(maxNoise, y, 3);
 
     display.display();
 }
 
 void handleLightning() { AS3935IrqTriggered = 1; }
 
+void appendToBuffer(char *buffer, int &idx, size_t bufferSize, const char *format, ...)
+{
+    va_list args;
+    va_start(args, format);
+    idx += vsnprintf(buffer + idx, bufferSize - idx, format, args);
+    va_end(args);
+}
+
 void scanI2CDevices()
 {
-    SerialUSB.println("Scanning...");
+    char buff[1024];
+    int idx = 0;
+    byte foundDevices[127];
+    int deviceCount = 0;
 
-    int nDevices = 0;
+    appendToBuffer(buff, idx, sizeof(buff), "Scanning...\n");
+
     for (byte address = 1; address < 127; address++)
     {
         Wire.beginTransmission(address);
         byte error = Wire.endTransmission();
 
         if (error == 0)
-        {
-            SerialUSB.print("I2C device found at address 0x");
-            if (address < 16)
-                SerialUSB.print("0");
-            SerialUSB.print(address, HEX);
-            SerialUSB.println(" !");
-            nDevices++;
-        }
+            foundDevices[deviceCount++] = address;
         else if (error == 4)
-        {
-            SerialUSB.print("Unknown error at address 0x");
-            if (address < 16)
-                SerialUSB.print("0");
-            SerialUSB.println(address, HEX);
-        }
+            appendToBuffer(buff, idx, sizeof(buff), "Unknown error at addr 0x%02X\n", address);
     }
 
-    if (nDevices == 0)
+    if (deviceCount == 0)
     {
-        SerialUSB.println("No I2C devices found\n");
+        appendToBuffer(buff, idx, sizeof(buff), "No I2C devices found\n");
     }
     else
     {
-        SerialUSB.println("done\n");
+        appendToBuffer(buff, idx, sizeof(buff), "Found %d I2C device(s):\n", deviceCount);
+        for (int i = 0; i < deviceCount; i++)
+            appendToBuffer(buff, idx, sizeof(buff), " - 0x%02X\n", foundDevices[i]);
     }
+
+    SerialUSB.print(buff);
 }
 
-void displayMessage(const String &message, int textSize, bool emidiateUpdate)
+void displayMessage(const String &message, int textSize, bool immediateUpdate)
 {
     display.clearDisplay();
     display.setTextSize(textSize);
@@ -324,7 +397,7 @@ void displayMessage(const String &message, int textSize, bool emidiateUpdate)
     display.setCursor(0, 0);
     display.println(message);
 
-    if (emidiateUpdate)
+    if (immediateUpdate)
         display.display();
 }
 
@@ -332,13 +405,13 @@ void displayLightningInfo(uint8_t dist, long energy, uint8_t percent)
 {
     char buffer[128]; // Adjust size as needed
 
-    sprintf(buffer, "L: %d km; E: %ld = %d %%", dist, energy / ENERGY_SCALE_FACTOR, percent);
+    sprintf(buffer, " L: %d km\n E: %d %%", dist, percent);
 
     display.clearDisplay();
-    displayMessage("Lightning !", 2);
+    displayMessage("Lightning!", 2);
 
-    display.setTextSize(1);
-    display.setCursor(0, 20);
+    //display.setTextSize(1);
+    display.setCursor(0, 30);
     display.print(buffer);
     display.display();
 

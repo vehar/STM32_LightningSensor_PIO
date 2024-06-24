@@ -84,6 +84,9 @@ void normalizeData(uint8_t *data, uint8_t length, uint8_t maxValue, uint8_t &max
 
 void setup()
 {
+    pinMode(PA1, OUTPUT);
+    digitalWrite(PA1, HIGH);
+
     pinMode(LED_PIN, OUTPUT);
     digitalWrite(LED_PIN, HIGH); // Turn off the built-in LED
 
@@ -184,64 +187,147 @@ void handleLightningInterrupt(int index)
         SerialUSB.println("Out of range lightning detected.");
 }
 
+#define KEYPAD_PIN A0
+
+// Function to get the pressed button
+// Thresholds for analog values with a 22kΩ pull-up resistor
+const int UP_THRESHOLD = 389;     // Approximate analog value for UP button
+const int LEFT_THRESHOLD = 520;   // Approximate analog value for LEFT button
+const int DOWN_THRESHOLD = 0;     // Approximate analog value for DOWN button
+const int RIGHT_THRESHOLD = 235;  // Approximate analog value for RIGHT button
+const int CENTER_THRESHOLD = 628; // Approximate analog value for CENTER button
+
+const int TOLERANCE = 20; // Tolerance for analog readings
+
+// Enum for button states
+enum Button
+{
+    BUTTON_NONE,
+    BUTTON_UP,
+    BUTTON_LEFT,
+    BUTTON_DOWN,
+    BUTTON_RIGHT,
+    BUTTON_CENTER
+};
+
+// Structure to hold button threshold data
+struct ButtonThreshold
+{
+    Button button;
+    int threshold;
+};
+
+// Array of button thresholds
+const ButtonThreshold buttonThresholds[] = { { BUTTON_UP, UP_THRESHOLD },
+                                             { BUTTON_LEFT, LEFT_THRESHOLD },
+                                             { BUTTON_DOWN, DOWN_THRESHOLD },
+                                             { BUTTON_RIGHT, RIGHT_THRESHOLD },
+                                             { BUTTON_CENTER, CENTER_THRESHOLD } };
+
+const int buttonCount = sizeof(buttonThresholds) / sizeof(buttonThresholds[0]);
+
+// Function to get the pressed button
+Button getPressedButton()
+{
+    int analogValue = analogRead(KEYPAD_PIN);
+
+    for (int i = 0; i < buttonCount; i++)
+    {
+        if (abs(analogValue - buttonThresholds[i].threshold) <= TOLERANCE)
+            return buttonThresholds[i].button;
+    }
+
+    return BUTTON_NONE;
+}
+
 void loop()
 {
-    static int index = 0;
-    static unsigned long lastDataCollectionTime = 0;
-    static unsigned long lastDisplayUpdateTime = 0;
-    static unsigned long lastDetectedTime = 0;
+    char buffer[128]; // Adjust size as needed
 
-    unsigned long currentTime = millis();
+    Button pressedButton = getPressedButton();
+    sprintf(buffer, "ADC: %d \r\n", pressedButton);
+    SerialUSB.print(buffer);
 
-    // Collect data every 100 milliseconds
-    if (currentTime - lastDataCollectionTime >= 100)
+    switch (pressedButton)
     {
-        collectData(index);
-        lastDataCollectionTime = currentTime;
+    case BUTTON_UP:
+        Serial.println("UP button pressed");
+        break;
+    case BUTTON_LEFT:
+        Serial.println("LEFT button pressed");
+        break;
+    case BUTTON_DOWN:
+        Serial.println("DOWN button pressed");
+        break;
+    case BUTTON_RIGHT:
+        Serial.println("RIGHT button pressed");
+        break;
+    case BUTTON_CENTER:
+        Serial.println("CENTER button pressed");
+        break;
+    default:
+        Serial.println("No button pressed or invalid reading");
+        break;
     }
 
-    // Update display every 1000 milliseconds
-    if (currentTime - lastDisplayUpdateTime >= 1000)
-    {
-        currentTimeInfo.seconds++;
-        if (currentTimeInfo.seconds >= 60)
+    delay(1000);
+    /*
+        static int index = 0;
+        static unsigned long lastDataCollectionTime = 0;
+        static unsigned long lastDisplayUpdateTime = 0;
+        static unsigned long lastDetectedTime = 0;
+
+        unsigned long currentTime = millis();
+
+        // Collect data every 100 milliseconds
+        if (currentTime - lastDataCollectionTime >= 100)
         {
-            currentTimeInfo.seconds = 0;
-            currentTimeInfo.minutes++;
-            if (currentTimeInfo.minutes >= 60)
+            collectData(index);
+            lastDataCollectionTime = currentTime;
+        }
+
+        // Update display every 1000 milliseconds
+        if (currentTime - lastDisplayUpdateTime >= 1000)
+        {
+            currentTimeInfo.seconds++;
+            if (currentTimeInfo.seconds >= 60)
             {
-                currentTimeInfo.minutes = 0;
-                currentTimeInfo.hours++;
+                currentTimeInfo.seconds = 0;
+                currentTimeInfo.minutes++;
+                if (currentTimeInfo.minutes >= 60)
+                {
+                    currentTimeInfo.minutes = 0;
+                    currentTimeInfo.hours++;
+                }
             }
+
+            // Accumulate and display cyclic
+            // index = (index + 1) % DATA_POINTS;
+
+            // OR
+            // Shift data to the right
+            for (int i = DATA_POINTS - 1; i > 0; i--)
+                data[i] = data[i - 1];
+
+            data[0] = { 0, 0, 0, 0, 0 }; // Clear the first element
+
+            if (lightningDetected == false)
+                updateDisplay();
+
+            lastDisplayUpdateTime = currentTime;
         }
 
-        // Accumulate and display cyclic
-        // index = (index + 1) % DATA_POINTS;
-
-        // OR
-        // Shift data to the right
-        for (int i = DATA_POINTS - 1; i > 0; i--)
-            data[i] = data[i - 1];
-
-        data[0] = { 0, 0, 0, 0, 0 }; // Clear the first element
-
-        if (lightningDetected == false)
-            updateDisplay();
-
-        lastDisplayUpdateTime = currentTime;
-    }
-
-    if (lightningDetected)
-    {
-        if (lastDetectedTime == 0)
-            lastDetectedTime = currentTime;
-
-        if (currentTime - lastDetectedTime >= 5000)
+        if (lightningDetected)
         {
-            lightningDetected = false;
-            lastDetectedTime = 0;
-        }
-    }
+            if (lastDetectedTime == 0)
+                lastDetectedTime = currentTime;
+
+            if (currentTime - lastDetectedTime >= 5000)
+            {
+                lightningDetected = false;
+                lastDetectedTime = 0;
+            }
+        }*/
 }
 
 void collectData(int index)
@@ -410,7 +496,7 @@ void displayLightningInfo(uint8_t dist, long energy, uint8_t percent)
     display.clearDisplay();
     displayMessage("Lightning!", 2);
 
-    //display.setTextSize(1);
+    // display.setTextSize(1);
     display.setCursor(0, 30);
     display.print(buffer);
     display.display();

@@ -1,6 +1,7 @@
 {
     "files.associations": {
         "arduino.h": "c",
-        "iterator": "cpp"
+        "iterator": "cpp",
+        "*.tcc": "cpp"
     }
 }

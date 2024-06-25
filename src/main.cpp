@@ -2,12 +2,13 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include <Arduino.h>
+#include <Menu.h>
+#include <MenuItem.h>
+#include <MenuManager.h>
+#include <Parameter.h>
 #include <Wire.h>
+#include <keypad.h>
 
-#define SCREEN_WIDTH 128
-#define SCREEN_HEIGHT 64
-#define OLED_RESET -1
-#define OLED_ADDR 0x3C
 #define LED_PIN PC13
 
 #define AS3935_IRQ_PIN PB5
@@ -60,6 +61,10 @@ struct LightningInfo
 
 LightningInfo spikeInfo;
 
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+#define OLED_RESET -1
+#define OLED_ADDR 0x3C
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 AS3935 as3935(Wire, AS3935_IRQ_PIN, AS3935_I2C_ADDR);
 
@@ -82,8 +87,43 @@ void collectData(int index);
 void updateDisplay();
 void normalizeData(uint8_t *data, uint8_t length, uint8_t maxValue, uint8_t &maxDataValue);
 
+///////////
+// Function prototypes for menu actions
+void action1();
+void action2();
+
+// External variables to be tuned
+int externalVar1 = 0;
+int externalVar2 = 50;
+
+// Parameters referencing external variables
+Parameter param1("Param1", externalVar1, -10, 10);
+Parameter param2("Param2", externalVar2, 0, 100);
+
+// Menu items and menus
+MenuItem item1("Action 1", MENU_ITEM_ACTION, action1);
+MenuItem item2(" Param1", MENU_ITEM_PARAMETER, nullptr, &param1);
+MenuItem item3(" Param2", MENU_ITEM_PARAMETER, nullptr, &param2);
+MenuItem item4("Action 2", MENU_ITEM_ACTION, action2);
+
+MenuItem *mainMenuItems[] = { &item1, &item2, &item3, &item4 };
+Menu mainMenu("Main Menu", mainMenuItems, 4);
+
+MenuManager menuManager(display, &mainMenu);
+
+void action1() { Serial.println("Action 1 executed"); }
+
+bool activateMenuMode = false;
+void action2()
+{
+    Serial.println("Action 2 executed");
+    activateMenuMode = false;
+}
+/////////////
+
 void setup()
 {
+    // For keypad pullUp
     pinMode(PA1, OUTPUT);
     digitalWrite(PA1, HIGH);
 
@@ -149,6 +189,9 @@ void setup()
 
     // displayLightningInfo(42, 2000000, 99);
     delay(1000);
+
+    // Initialize the menu manager with the root menu
+    menuManager.updateDisplay();
 }
 
 void handleNoiseInterrupt(int index)
@@ -187,90 +230,21 @@ void handleLightningInterrupt(int index)
         SerialUSB.println("Out of range lightning detected.");
 }
 
-#define KEYPAD_PIN A0
-
-// Function to get the pressed button
-// Thresholds for analog values with a 22kΩ pull-up resistor
-const int UP_THRESHOLD = 389;     // Approximate analog value for UP button
-const int LEFT_THRESHOLD = 520;   // Approximate analog value for LEFT button
-const int DOWN_THRESHOLD = 0;     // Approximate analog value for DOWN button
-const int RIGHT_THRESHOLD = 235;  // Approximate analog value for RIGHT button
-const int CENTER_THRESHOLD = 628; // Approximate analog value for CENTER button
-
-const int TOLERANCE = 20; // Tolerance for analog readings
-
-// Enum for button states
-enum Button
-{
-    BUTTON_NONE,
-    BUTTON_UP,
-    BUTTON_LEFT,
-    BUTTON_DOWN,
-    BUTTON_RIGHT,
-    BUTTON_CENTER
-};
-
-// Structure to hold button threshold data
-struct ButtonThreshold
-{
-    Button button;
-    int threshold;
-};
-
-// Array of button thresholds
-const ButtonThreshold buttonThresholds[] = { { BUTTON_UP, UP_THRESHOLD },
-                                             { BUTTON_LEFT, LEFT_THRESHOLD },
-                                             { BUTTON_DOWN, DOWN_THRESHOLD },
-                                             { BUTTON_RIGHT, RIGHT_THRESHOLD },
-                                             { BUTTON_CENTER, CENTER_THRESHOLD } };
-
-const int buttonCount = sizeof(buttonThresholds) / sizeof(buttonThresholds[0]);
-
-// Function to get the pressed button
-Button getPressedButton()
-{
-    int analogValue = analogRead(KEYPAD_PIN);
-
-    for (int i = 0; i < buttonCount; i++)
-    {
-        if (abs(analogValue - buttonThresholds[i].threshold) <= TOLERANCE)
-            return buttonThresholds[i].button;
-    }
-
-    return BUTTON_NONE;
-}
-
 void loop()
 {
-    char buffer[128]; // Adjust size as needed
-
     Button pressedButton = getPressedButton();
-    sprintf(buffer, "ADC: %d \r\n", pressedButton);
+    if ((pressedButton == BUTTON_DOWN) && (activateMenuMode == false))
+        activateMenuMode = true;
+
+    if (activateMenuMode)
+        menuManager.handleInput(pressedButton);
+
+    char buffer[128]; // Adjust size as needed
+    sprintf(buffer, "1 = : %d, 2 = : %d  \r\n", externalVar1, externalVar2);
     SerialUSB.print(buffer);
 
-    switch (pressedButton)
-    {
-    case BUTTON_UP:
-        Serial.println("UP button pressed");
-        break;
-    case BUTTON_LEFT:
-        Serial.println("LEFT button pressed");
-        break;
-    case BUTTON_DOWN:
-        Serial.println("DOWN button pressed");
-        break;
-    case BUTTON_RIGHT:
-        Serial.println("RIGHT button pressed");
-        break;
-    case BUTTON_CENTER:
-        Serial.println("CENTER button pressed");
-        break;
-    default:
-        Serial.println("No button pressed or invalid reading");
-        break;
-    }
+    delay(200); // Debounce delay
 
-    delay(1000);
     /*
         static int index = 0;
         static unsigned long lastDataCollectionTime = 0;

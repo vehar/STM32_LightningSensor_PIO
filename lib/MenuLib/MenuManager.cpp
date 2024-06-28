@@ -59,6 +59,7 @@ void MenuManager::handleInput(Button button)
 void MenuManager::updateDisplay()
 {
     display.clearDisplay();
+    display.setTextSize(1);
     display.setCursor(0, 0);
     display.print(currentMenu->getTitle());
     for (int i = 0; i < currentMenu->getItemCount(); i++)
@@ -83,8 +84,9 @@ void MenuManager::displayParameter(Parameter *parameter)
     while (tuneFlag)
     {
         display.clearDisplay();
+        display.setTextSize(2);
         display.setCursor(0, 0);
-        display.printf("SET %s \n= %d", parameter->getName(), parameter->getValue());
+        display.printf("SET\n%s\n=  %d", parameter->getName(), parameter->getValue());
         display.display();
 
         delay(100); // Debounce delay

@@ -90,30 +90,67 @@ void normalizeData(uint8_t *data, uint8_t length, uint8_t maxValue, uint8_t &max
 ///////////
 // Function prototypes for menu actions
 void action1();
-void action2();
+void as3935_InitRecalibrate();
+void action3();
 
 // External variables to be tuned
-int externalVar1 = 0;
-int externalVar2 = 50;
+int minimumLightnings = 0;
+int noiseFloor = 5;
+int watchDogTh = 1;
+int spikeRegection = 0;
 
 // Parameters referencing external variables
-Parameter param1("Param 1", externalVar1, -10, 10);
-Parameter param2("Param 2", externalVar2, 0, 100);
+Parameter param1("minimumLightnings", minimumLightnings, 0, 3);
+Parameter param2("noiseFloor", noiseFloor, 0, 7);
+Parameter param3("watchDogTh", watchDogTh, 0, 15);
+Parameter param4("spikeRegection", spikeRegection, 0, 15);
 
 // Menu items and menus
-MenuItem item1("Action 1", MENU_ITEM_ACTION, action1);
-MenuItem item2(" Param1", MENU_ITEM_PARAMETER, nullptr, &param1);
-MenuItem item3(" Param2", MENU_ITEM_PARAMETER, nullptr, &param2);
-MenuItem item4("Exit", MENU_ITEM_ACTION, action2);
+MenuItem item1("View settings", MENU_ITEM_ACTION, action1);
+MenuItem item2(" minimumLightnings", MENU_ITEM_PARAMETER, nullptr, &param1);
+MenuItem item3(" noiseFloor", MENU_ITEM_PARAMETER, nullptr, &param2);
+MenuItem item4(" watchDogTh", MENU_ITEM_PARAMETER, nullptr, &param3);
+MenuItem item5(" spikeRegection", MENU_ITEM_PARAMETER, nullptr, &param4);
+MenuItem item6("Recalibrate", MENU_ITEM_ACTION, as3935_InitRecalibrate);
+MenuItem item7("Exit", MENU_ITEM_ACTION, action3);
 
-MenuItem *mainMenuItems[] = { &item2, &item3, &item4 };
-Menu mainMenu("Main Menu", mainMenuItems, 3);
+MenuItem *mainMenuItems[] = { &item1, &item2, &item3, &item4, &item5, &item6, &item7 };
+Menu mainMenu("Main Menu", mainMenuItems, 7);
 
 MenuManager menuManager(display, &mainMenu);
 bool activateMenuMode = false;
 
-void action1() { Serial.println("Action 1 executed"); }
-void action2()
+void action1()
+{
+    Serial.println("Action 1 executed");
+    AS3935Registers regs = getAS3935Registers();
+    printAS3935Registers(regs);
+    delay(3000);
+}
+
+void as3935_InitRecalibrate()
+{
+    Serial.println("Calibration..");
+    detachInterrupt(digitalPinToInterrupt(AS3935_IRQ_PIN));
+
+    as3935.setMinimumLightnings(minimumLightnings);
+    as3935.setNoiseFloor(noiseFloor);
+    as3935.setSpikeRejection(spikeRegection);
+    as3935.setWatchdogThreshold(watchDogTh);
+
+    if (!as3935.calibrate())
+        SerialUSB.println("Tuning out of range, check your wiring, your sensor!");
+    else
+        SerialUSB.println("Calibration done!");
+
+    delay(1000);
+    printAS3935Registers(getAS3935Registers());
+
+    AS3935IrqTriggered = 0;
+    attachInterrupt(digitalPinToInterrupt(AS3935_IRQ_PIN), handleLightning, RISING);
+}
+
+void action3()
 {
     Serial.println("Exit executed");
     activateMenuMode = false;
@@ -164,26 +201,8 @@ void setup()
 
     as3935.setOutdoors();
     as3935.enableDisturbers();
-    as3935.setNoiseFloor(5);
-    as3935.setMinimumLightnings(0);
-    as3935.setSpikeRejection(0);
-    as3935.setWatchdogThreshold(0);
+    as3935_InitRecalibrate();
 
-    if (!as3935.calibrate())
-    {
-        SerialUSB.println("Tuning out of range, check your wiring, your sensor!");
-    }
-    else
-    {
-        SerialUSB.println("Calibration done!");
-    }
-
-    delay(1000);
-    regs = getAS3935Registers();
-    printAS3935Registers(regs);
-
-    AS3935IrqTriggered = 0;
-    attachInterrupt(digitalPinToInterrupt(AS3935_IRQ_PIN), handleLightning, RISING);
     SerialUSB.println("AS3935 initialized and ready.");
 
     // displayLightningInfo(42, 2000000, 99);
@@ -248,13 +267,11 @@ void loop()
         if (activateMenuMode)
         {
             menuManager.handleInput(pressedButton);
-
-            char buffer[128]; // Adjust size as needed
-            sprintf(buffer, "1 = : %d, 2 = : %d  \r\n", externalVar1, externalVar2);
-            SerialUSB.print(buffer);
             lastButtonReadTime = currentTime;
+            // char buffer[128]; // Adjust size as needed
+            // sprintf(buffer, "1 = : %d, 2 = : %d  \r\n", externalVar1, externalVar2);
+            // SerialUSB.print(buffer);
         }
-        delay(50);
     }
 
     // Collect data every 100 milliseconds
@@ -504,12 +521,12 @@ void printAS3935Registers(AS3935Registers regs)
     sprintf(buffer,
             "Noise: %d Spike: %d\n"
             "Watchdog: %d\n"
-            "Distance: %d\n"
             "Min Light: %d\n"
+            "Distance: %d\n"
             "TRCO: %d SRCO: %d\n"
             "AFE: %d CapVal: %d\n",
-            regs.noiseFloor, regs.spikeRejection, regs.watchdogThreshold, regs.distance,
-            regs.minNumberOfLightnings, regs.trco, regs.srco, regs.afe, regs.capVal);
+            regs.noiseFloor, regs.spikeRejection, regs.watchdogThreshold,
+            regs.minNumberOfLightnings, regs.distance, regs.trco, regs.srco, regs.afe, regs.capVal);
 
     display.clearDisplay();
     display.setTextSize(1);

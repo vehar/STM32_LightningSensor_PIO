@@ -97,26 +97,25 @@ int externalVar1 = 0;
 int externalVar2 = 50;
 
 // Parameters referencing external variables
-Parameter param1("Param1", externalVar1, -10, 10);
-Parameter param2("Param2", externalVar2, 0, 100);
+Parameter param1("Param 1", externalVar1, -10, 10);
+Parameter param2("Param 2", externalVar2, 0, 100);
 
 // Menu items and menus
 MenuItem item1("Action 1", MENU_ITEM_ACTION, action1);
 MenuItem item2(" Param1", MENU_ITEM_PARAMETER, nullptr, &param1);
 MenuItem item3(" Param2", MENU_ITEM_PARAMETER, nullptr, &param2);
-MenuItem item4("Action 2", MENU_ITEM_ACTION, action2);
+MenuItem item4("Exit", MENU_ITEM_ACTION, action2);
 
-MenuItem *mainMenuItems[] = { &item1, &item2, &item3, &item4 };
-Menu mainMenu("Main Menu", mainMenuItems, 4);
+MenuItem *mainMenuItems[] = { &item2, &item3, &item4 };
+Menu mainMenu("Main Menu", mainMenuItems, 3);
 
 MenuManager menuManager(display, &mainMenu);
+bool activateMenuMode = false;
 
 void action1() { Serial.println("Action 1 executed"); }
-
-bool activateMenuMode = false;
 void action2()
 {
-    Serial.println("Action 2 executed");
+    Serial.println("Exit executed");
     activateMenuMode = false;
 }
 /////////////
@@ -232,76 +231,81 @@ void handleLightningInterrupt(int index)
 
 void loop()
 {
-    Button pressedButton = getPressedButton();
-    if ((pressedButton == BUTTON_DOWN) && (activateMenuMode == false))
-        activateMenuMode = true;
+    static int index = 0;
+    static unsigned long lastDataCollectionTime = 0;
+    static unsigned long lastDisplayUpdateTime = 0;
+    static unsigned long lastDetectedTime = 0;
+    static unsigned long lastButtonReadTime = 0;
 
-    if (activateMenuMode)
-        menuManager.handleInput(pressedButton);
+    unsigned long currentTime = millis();
 
-    char buffer[128]; // Adjust size as needed
-    sprintf(buffer, "1 = : %d, 2 = : %d  \r\n", externalVar1, externalVar2);
-    SerialUSB.print(buffer);
+    if (currentTime - lastButtonReadTime >= 200)
+    {
+        Button pressedButton = getPressedButton();
+        if ((pressedButton == BUTTON_DOWN) && (activateMenuMode == false))
+            activateMenuMode = true;
 
-    delay(200); // Debounce delay
-
-    /*
-        static int index = 0;
-        static unsigned long lastDataCollectionTime = 0;
-        static unsigned long lastDisplayUpdateTime = 0;
-        static unsigned long lastDetectedTime = 0;
-
-        unsigned long currentTime = millis();
-
-        // Collect data every 100 milliseconds
-        if (currentTime - lastDataCollectionTime >= 100)
+        if (activateMenuMode)
         {
-            collectData(index);
-            lastDataCollectionTime = currentTime;
+            menuManager.handleInput(pressedButton);
+
+            char buffer[128]; // Adjust size as needed
+            sprintf(buffer, "1 = : %d, 2 = : %d  \r\n", externalVar1, externalVar2);
+            SerialUSB.print(buffer);
+            lastButtonReadTime = currentTime;
+        }
+        delay(50);
+    }
+
+    // Collect data every 100 milliseconds
+    if (currentTime - lastDataCollectionTime >= 100)
+    {
+        collectData(index);
+        lastDataCollectionTime = currentTime;
+    }
+
+    // Update display every 1000 milliseconds
+    if (currentTime - lastDisplayUpdateTime >= 1000)
+    {
+        currentTimeInfo.seconds++;
+        if (currentTimeInfo.seconds >= 60)
+        {
+            currentTimeInfo.seconds = 0;
+            currentTimeInfo.minutes++;
+            if (currentTimeInfo.minutes >= 60)
+            {
+                currentTimeInfo.minutes = 0;
+                currentTimeInfo.hours++;
+            }
         }
 
-        // Update display every 1000 milliseconds
-        if (currentTime - lastDisplayUpdateTime >= 1000)
+        // Accumulate and display cyclic
+        // index = (index + 1) % DATA_POINTS;
+
+        // OR
+        // Shift data to the right
+        for (int i = DATA_POINTS - 1; i > 0; i--)
+            data[i] = data[i - 1];
+
+        data[0] = { 0, 0, 0, 0, 0 }; // Clear the first element
+
+        if ((!lightningDetected) && (!activateMenuMode))
+            updateDisplay();
+
+        lastDisplayUpdateTime = currentTime;
+    }
+
+    if (lightningDetected)
+    {
+        if (lastDetectedTime == 0)
+            lastDetectedTime = currentTime;
+
+        if (currentTime - lastDetectedTime >= 5000)
         {
-            currentTimeInfo.seconds++;
-            if (currentTimeInfo.seconds >= 60)
-            {
-                currentTimeInfo.seconds = 0;
-                currentTimeInfo.minutes++;
-                if (currentTimeInfo.minutes >= 60)
-                {
-                    currentTimeInfo.minutes = 0;
-                    currentTimeInfo.hours++;
-                }
-            }
-
-            // Accumulate and display cyclic
-            // index = (index + 1) % DATA_POINTS;
-
-            // OR
-            // Shift data to the right
-            for (int i = DATA_POINTS - 1; i > 0; i--)
-                data[i] = data[i - 1];
-
-            data[0] = { 0, 0, 0, 0, 0 }; // Clear the first element
-
-            if (lightningDetected == false)
-                updateDisplay();
-
-            lastDisplayUpdateTime = currentTime;
+            lightningDetected = false;
+            lastDetectedTime = 0;
         }
-
-        if (lightningDetected)
-        {
-            if (lastDetectedTime == 0)
-                lastDetectedTime = currentTime;
-
-            if (currentTime - lastDetectedTime >= 5000)
-            {
-                lightningDetected = false;
-                lastDetectedTime = 0;
-            }
-        }*/
+    }
 }
 
 void collectData(int index)

@@ -11,6 +11,7 @@ class MenuManager
 {
 public:
     MenuManager(Adafruit_SSD1306 &display, Menu *rootMenu);
+    void waitTillButtonReleased(Button bt);
     void handleInput(Button button);
     void updateDisplay();
 

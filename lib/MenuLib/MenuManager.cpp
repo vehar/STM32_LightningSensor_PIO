@@ -3,12 +3,23 @@
 MenuManager::MenuManager(Adafruit_SSD1306 &display, Menu *rootMenu)
     : display(display), currentMenu(rootMenu), currentIndex(0)
 {
-    // updateDisplay();
+}
+
+void MenuManager::waitTillButtonReleased(Button bt)
+{
+    Button button = getPressedButton();
+    while (button == bt) // Wait till release
+    {
+        delay(10);
+        button = getPressedButton();
+    }
 }
 
 void MenuManager::handleInput(Button button)
 {
     MenuItem *item = nullptr;
+
+    waitTillButtonReleased(BUTTON_DOWN);
 
     switch (button)
     {
@@ -16,16 +27,14 @@ void MenuManager::handleInput(Button button)
         currentIndex--;
         if (currentIndex < 0)
             currentIndex = currentMenu->getItemCount() - 1;
-
-        updateDisplay();
         break;
     case BUTTON_DOWN:
         currentIndex++;
         if (currentIndex >= currentMenu->getItemCount())
             currentIndex = 0;
-
-        updateDisplay();
         break;
+
+    case BUTTON_RIGHT:
     case BUTTON_CENTER:
         item = currentMenu->getItem(currentIndex);
         if (item != nullptr)
@@ -34,19 +43,17 @@ void MenuManager::handleInput(Button button)
                 item->executeAction();
             else if (item->getType() == MENU_ITEM_PARAMETER)
                 displayParameter(item->getParameter());
-
-            updateDisplay(); // Return to the menu after adjusting
         }
+        waitTillButtonReleased(BUTTON_CENTER);
         break;
     case BUTTON_LEFT:
         // Implement "Back" functionality if needed
         break;
-    case BUTTON_RIGHT:
-        // Implement any additional functionality if needed
-        break;
+
     default:
         break;
     }
+    updateDisplay();
 }
 
 void MenuManager::updateDisplay()
@@ -70,40 +77,31 @@ void MenuManager::updateDisplay()
 void MenuManager::displayParameter(Parameter *parameter)
 {
     bool tuneFlag = true;
-    Button button = getPressedButton();
-    while (button != BUTTON_RIGHT)
-    {
-        delay(10); // Wait till release
-        button = getPressedButton();
-    }
+
+    waitTillButtonReleased(BUTTON_CENTER);
 
     while (tuneFlag)
     {
+        display.clearDisplay();
+        display.setCursor(0, 0);
+        display.printf("SET %s \n= %d", parameter->getName(), parameter->getValue());
+        display.display();
+
         delay(100); // Debounce delay
-        button = getPressedButton();
-        switch (button)
+        Button bt = getPressedButton();
+        switch (bt)
         {
         case BUTTON_LEFT:
-            if (parameter->decrement() == 0)
-            {
-                display.clearDisplay();
-                display.setCursor(0, 0);
-                display.printf("Adjust %s = %d", parameter->getName(), parameter->getValue());
-                display.display();
-            }
+        case BUTTON_DOWN:
+            parameter->decrement();
             break;
 
         case BUTTON_RIGHT:
-            if (parameter->increment() == 0)
-            {
-                display.clearDisplay();
-                display.setCursor(0, 0);
-                display.printf("Adjust %s = %d", parameter->getName(), parameter->getValue());
-                display.display();
-            }
+        case BUTTON_UP:
+            parameter->increment();
             break;
 
-        case BUTTON_CENTER: // Exit adjustment mode
+        case BUTTON_CENTER: // Apply and exit adjustment mode
             tuneFlag = false;
             break;
         }

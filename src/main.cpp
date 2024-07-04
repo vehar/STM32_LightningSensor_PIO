@@ -9,6 +9,13 @@
 #include <Wire.h>
 #include <keypad.h>
 
+#include <Adafruit_BMP280.h>
+#include <Thinary_AHT10.h>
+
+AHT10Class AHT10;
+Adafruit_BMP280 bmp;
+
+
 #define LED_PIN PC13
 
 #define AS3935_IRQ_PIN PB5
@@ -61,6 +68,14 @@ struct LightningInfo
 
 LightningInfo spikeInfo;
 
+struct Atmosphere {
+    float temperature;
+    float dewPoint;
+    float humidity;
+    float pressure;
+    float altitude;
+};
+
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
 #define OLED_RESET -1
@@ -86,6 +101,36 @@ void handleLightningInterrupt(int index);
 void collectData(int index);
 void updateDisplay();
 void normalizeData(uint8_t *data, uint8_t length, uint8_t maxValue, uint8_t &maxDataValue);
+
+void readAtmosphereData(Atmosphere &data) {
+    float temp = AHT10.GetTemperature() + bmp.readTemperature();
+    data.temperature = temp/2;
+    data.dewPoint = AHT10.GetDewPoint();
+    data.humidity = AHT10.GetHumidity();
+    data.pressure = bmp.readPressure();
+    data.altitude = bmp.readAltitude(1013.25); // Adjust to local sea level pressure
+}
+
+void printAtmosphereData(const Atmosphere &data) {
+    char buffer[256];
+
+    char tempStr[10], dewPointStr[10], humidityStr[10], pressureStr[10], altitudeStr[10];
+    dtostrf(data.temperature, 6, 2, tempStr);
+    dtostrf(data.dewPoint, 6, 2, dewPointStr);
+    dtostrf(data.humidity, 6, 2, humidityStr);
+    dtostrf(data.pressure, 10, 2, pressureStr);
+    dtostrf(data.altitude, 10, 2, altitudeStr);
+
+    snprintf(buffer, sizeof(buffer), "Temp: %s C, Dew Point: %s C, Humidity: %s %%, Pressure: %s Pa, Altitude: %s m\n", tempStr, dewPointStr, humidityStr, pressureStr, altitudeStr);
+    Serial.print(buffer);
+
+    //Print to Display
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setCursor(0, 0);
+    display.print(buffer);
+    display.display();
+}
 
 ///////////
 // Function prototypes for menu actions
@@ -122,7 +167,7 @@ bool activateMenuMode = false;
 
 void action1()
 {
-    Serial.println("Action 1 executed");
+    SerialUSB.println("Action 1 executed");
     AS3935Registers regs = getAS3935Registers();
     printAS3935Registers(regs);
     delay(3000);
@@ -130,7 +175,7 @@ void action1()
 
 void as3935_InitRecalibrate()
 {
-    Serial.println("Calibration..");
+    SerialUSB.println("Calibration..");
     detachInterrupt(digitalPinToInterrupt(AS3935_IRQ_PIN));
 
     as3935.setMinimumLightnings(minimumLightnings);
@@ -152,7 +197,7 @@ void as3935_InitRecalibrate()
 
 void action3()
 {
-    Serial.println("Exit executed");
+    SerialUSB.println("Exit executed");
     activateMenuMode = false;
 }
 /////////////
@@ -176,8 +221,6 @@ void setup()
     Wire.setSDA(PB7);
     Wire.begin();
 
-    scanI2CDevices();
-
     if (!display.begin(SSD1306_SWITCHCAPVCC, OLED_ADDR))
     {
         SerialUSB.println(F("SSD1306 allocation failed"));
@@ -195,6 +238,24 @@ void setup()
             ;
     }
 
+  if(AHT10.begin(eAHT10Address_Low))
+      SerialUSB.println(F("AHT20 OK"));
+  else
+      SerialUSB.println(F("AHT20 Fsiled"));
+
+  
+  if (!bmp.begin()) {
+    SerialUSB.println(F("Could not find a valid BMP280 sensor, check wiring!"));
+    while (1);
+  }
+    /* Default settings from datasheet. */
+  bmp.setSampling(Adafruit_BMP280::MODE_NORMAL,     /* Operating Mode. */
+                  Adafruit_BMP280::SAMPLING_X2,     /* Temp. oversampling */
+                  Adafruit_BMP280::SAMPLING_X16,    /* Pressure oversampling */
+                  Adafruit_BMP280::FILTER_X16,      /* Filtering. */
+                  Adafruit_BMP280::STANDBY_MS_500); /* Standby time. */
+
+
     as3935.reset();
     AS3935Registers regs = getAS3935Registers();
     printAS3935Registers(regs);
@@ -208,6 +269,8 @@ void setup()
     // displayLightningInfo(42, 2000000, 99);
     delay(1000);
 
+//scanI2CDevices();
+ 
     // Initialize the menu manager with the root menu
     menuManager.updateDisplay();
 }
@@ -323,6 +386,15 @@ void loop()
             lastDetectedTime = 0;
         }
     }
+
+
+    Atmosphere atmosphereData;
+    readAtmosphereData(atmosphereData);
+    printAtmosphereData(atmosphereData);
+
+
+  delay(1000);
+
 }
 
 void collectData(int index)

@@ -118,10 +118,10 @@ void printAtmosphereData(const Atmosphere &data) {
     dtostrf(data.temperature, 6, 2, tempStr);
     dtostrf(data.dewPoint, 6, 2, dewPointStr);
     dtostrf(data.humidity, 6, 2, humidityStr);
-    dtostrf(data.pressure, 10, 2, pressureStr);
-    dtostrf(data.altitude, 10, 2, altitudeStr);
+    dtostrf(data.pressure, 6, 2, pressureStr);
+    dtostrf(data.altitude, 6, 2, altitudeStr);
 
-    snprintf(buffer, sizeof(buffer), "Temp: %s C, Dew Point: %s C, Humidity: %s %%, Pressure: %s Pa, Altitude: %s m\n", tempStr, dewPointStr, humidityStr, pressureStr, altitudeStr);
+    snprintf(buffer, sizeof(buffer), "Temp:%s C\nDew Point:%s C\nHumidity:%s %%\nPressure:%s Pa\nAltitude:%s m\n", tempStr, dewPointStr, humidityStr, pressureStr, altitudeStr);
     Serial.print(buffer);
 
     //Print to Display

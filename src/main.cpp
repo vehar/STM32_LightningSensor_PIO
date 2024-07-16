@@ -2,123 +2,24 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include <Arduino.h>
-#include <Menu.h>
-#include <MenuItem.h>
-#include <MenuManager.h>
-#include <Parameter.h>
+
 #include <Wire.h>
 #include <keypad.h>
+#include <main.h>
+#include <STM32RTC.h>
 
-#define LED_PIN PC13
+STM32RTC& rtc = STM32RTC::getInstance();
 
-#define AS3935_IRQ_PIN PB5
-#define AS3935_I2C_ADDR 0x01
-
-#define DATA_POINTS 55
-#define MAX_ENERGY 2097151
-#define HISTOGRAM_HEIGHT 14 // Height of each histogram section
-
-struct TimeInfo
-{
-    unsigned long hours;
-    unsigned long minutes;
-    unsigned long seconds;
-};
-
-struct MeasurementData
-{
-    uint8_t noise;
-    uint8_t disturber;
-    uint8_t lightningCount;
-    uint8_t lightningDistance;
-    uint8_t lightningEnergy;
-};
-
-MeasurementData data[DATA_POINTS];
-TimeInfo currentTimeInfo = { 0, 0, 0 };
-
-struct AS3935Registers
-{
-    int noiseFloor;
-    int spikeRejection;
-    int watchdogThreshold;
-    int distance;
-    int minNumberOfLightnings;
-    int afe;
-    int trco;
-    int srco;
-    int capVal;
-};
-
-struct LightningInfo
-{
-    uint8_t hour;
-    uint8_t min;
-    uint8_t sec;
-    uint8_t distance;
-    uint8_t energyPercent;
-};
-
-LightningInfo spikeInfo;
-
-#define SCREEN_WIDTH 128
-#define SCREEN_HEIGHT 64
-#define OLED_RESET -1
-#define OLED_ADDR 0x3C
-Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
-AS3935 as3935(Wire, AS3935_IRQ_PIN, AS3935_I2C_ADDR);
-
-void handleLightning();
 volatile int AS3935IrqTriggered = 0;
-
 bool lightningDetected = false;
+bool activateMenuMode = false;
 
-void setup();
-void loop();
-void scanI2CDevices();
-void displayMessage(const String &message, int textSize, bool immediateUpdate = true);
-void displayLightningInfo(uint8_t dist, long energy, uint8_t percent);
-AS3935Registers getAS3935Registers();
-void printAS3935Registers(AS3935Registers regs);
-void handleNoiseInterrupt(int index);
-void handleDisturberInterrupt(int index);
-void handleLightningInterrupt(int index);
-void collectData(int index);
-void updateDisplay();
-void normalizeData(uint8_t *data, uint8_t length, uint8_t maxValue, uint8_t &maxDataValue);
-
-///////////
-// Function prototypes for menu actions
-void action1();
-void as3935_InitRecalibrate();
-void action3();
-
-// External variables to be tuned
 int minimumLightnings = 0;
-int noiseFloor = 5;
+int noiseFloor = 3;
 int watchDogTh = 1;
 int spikeRegection = 0;
-
-// Parameters referencing external variables
-Parameter param1("minimumLightnings", minimumLightnings, 0, 3);
-Parameter param2("noiseFloor", noiseFloor, 0, 7);
-Parameter param3("watchDogTh", watchDogTh, 0, 15);
-Parameter param4("spikeRegection", spikeRegection, 0, 15);
-
-// Menu items and menus
-MenuItem item1("View settings", MENU_ITEM_ACTION, action1);
-MenuItem item2(" minimumLightnings", MENU_ITEM_PARAMETER, nullptr, &param1);
-MenuItem item3(" noiseFloor", MENU_ITEM_PARAMETER, nullptr, &param2);
-MenuItem item4(" watchDogTh", MENU_ITEM_PARAMETER, nullptr, &param3);
-MenuItem item5(" spikeRegection", MENU_ITEM_PARAMETER, nullptr, &param4);
-MenuItem item6("Recalibrate", MENU_ITEM_ACTION, as3935_InitRecalibrate);
-MenuItem item7("Exit", MENU_ITEM_ACTION, action3);
-
-MenuItem *mainMenuItems[] = { &item1, &item2, &item3, &item4, &item5, &item6, &item7 };
-Menu mainMenu("Main Menu", mainMenuItems, 7);
-
-MenuManager menuManager(display, &mainMenu);
-bool activateMenuMode = false;
+int dispAlgo = 1; // 0 - sum, 1 - shift
+int updateSeconds = 1;
 
 void action1()
 {
@@ -205,22 +106,21 @@ void setup()
 
     SerialUSB.println("AS3935 initialized and ready.");
 
-    // displayLightningInfo(42, 2000000, 99);
+    // displayLightningInfo(42, 99);
     delay(1000);
 
-    // Initialize the menu manager with the root menu
-    menuManager.updateDisplay();
+    menuManager.updateDisplay(); // Initialize the menu manager with the root menu
 }
 
 void handleNoiseInterrupt(int index)
 {
-    data[index].noise++;
+    spikeArray[index].noise++;
     SerialUSB.println("Noise level too high, try adjusting noise floor");
 }
 
 void handleDisturberInterrupt(int index)
 {
-    data[index].disturber++;
+    spikeArray[index].disturber++;
     SerialUSB.println("Disturber detected");
 }
 
@@ -230,21 +130,19 @@ void handleLightningInterrupt(int index)
     int distance = as3935.lightningDistanceKm();
     long energy = as3935.lightningEnergy();
 
-    spikeInfo.distance = distance;
-    spikeInfo.energyPercent = (energy * 100) / MAX_ENERGY;
-    spikeInfo.sec = currentTimeInfo.seconds;
-    spikeInfo.min = currentTimeInfo.minutes;
-    spikeInfo.hour = currentTimeInfo.hours;
+    lightningData.spike.lightningDistance = distance;
+    lightningData.spike.lightningEnergyPercent = (energy * 100) / MAX_ENERGY;
+    lightningData.time = currentTimeInfo;
 
-    data[index].lightningCount++;
-    data[index].lightningDistance = distance;
-    data[index].lightningEnergy = spikeInfo.energyPercent;
+    spikeArray[index].lightningCount++;
+    spikeArray[index].lightningDistance = distance;
+    spikeArray[index].lightningEnergyPercent = lightningData.spike.lightningEnergyPercent;
 
-    displayLightningInfo(distance, energy, spikeInfo.energyPercent);
+    //   displayLightningInfo(lightningData.distance, lightningData.energyPercent);
 
     if (distance == 1)
         SerialUSB.println("Storm overhead, watch out!");
-    else if (distance == 63)
+    else if (distance == LIGHTNING_MAX_DETECTION_DISTANCE)
         SerialUSB.println("Out of range lightning detected.");
 }
 
@@ -253,6 +151,7 @@ void loop()
     static int index = 0;
     static unsigned long lastDataCollectionTime = 0;
     static unsigned long lastDisplayUpdateTime = 0;
+    static unsigned long lastTimeUpdateTime = 0;
     static unsigned long lastDetectedTime = 0;
     static unsigned long lastButtonReadTime = 0;
 
@@ -281,8 +180,7 @@ void loop()
         lastDataCollectionTime = currentTime;
     }
 
-    // Update display every 1000 milliseconds
-    if (currentTime - lastDisplayUpdateTime >= 1000)
+    if (currentTime - lastTimeUpdateTime >= 1000)
     {
         currentTimeInfo.seconds++;
         if (currentTimeInfo.seconds >= 60)
@@ -295,16 +193,24 @@ void loop()
                 currentTimeInfo.hours++;
             }
         }
+        lastTimeUpdateTime = currentTime;
+    }
 
-        // Accumulate and display cyclic
-        // index = (index + 1) % DATA_POINTS;
+    // Update display every 1000 milliseconds
+    if (currentTime - lastDisplayUpdateTime >= (1000 * updateSeconds))
+    {
+        if (dispAlgo == 0) // Accumulate and display cyclic
+        {
+            index = (index + 1) % DATA_POINTS;
+        }
+        else if (dispAlgo == 1) // Shift data to the right
+        {
+            index = 0;
+            for (int i = DATA_POINTS - 1; i > 0; i--)
+                spikeArray[i] = spikeArray[i - 1];
 
-        // OR
-        // Shift data to the right
-        for (int i = DATA_POINTS - 1; i > 0; i--)
-            data[i] = data[i - 1];
-
-        data[0] = { 0, 0, 0, 0, 0 }; // Clear the first element
+            spikeArray[0] = { 0, 0, 0, 0, 0 }; // Clear the first element
+        }
 
         if ((!lightningDetected) && (!activateMenuMode))
             updateDisplay();
@@ -315,7 +221,11 @@ void loop()
     if (lightningDetected)
     {
         if (lastDetectedTime == 0)
+        {
+            displayLightningInfo(lightningData.spike.lightningDistance,
+                                 lightningData.spike.lightningEnergyPercent);
             lastDetectedTime = currentTime;
+        }
 
         if (currentTime - lastDetectedTime >= 5000)
         {
@@ -383,12 +293,13 @@ void updateDisplay()
     char buffer[128]; // Display uptime
 
     sprintf(buffer, "%02lu:%02lu:%02lu L %dkm E %d%%\n", currentTimeInfo.hours,
-            currentTimeInfo.minutes, currentTimeInfo.seconds, spikeInfo.distance,
-            spikeInfo.energyPercent);
+            currentTimeInfo.minutes, currentTimeInfo.seconds, lightningData.spike.lightningDistance,
+            lightningData.spike.lightningEnergyPercent);
 
     displayMessage(buffer, 1, false);
 
     uint8_t maxNoise, maxDisturber, maxDistance, maxEnergy;
+
     uint8_t noiseCounts[DATA_POINTS];
     uint8_t disturberCounts[DATA_POINTS];
     uint8_t lightningDistances[DATA_POINTS];
@@ -397,10 +308,10 @@ void updateDisplay()
     // Collect raw data
     for (int i = 0; i < DATA_POINTS; i++)
     {
-        noiseCounts[i] = data[i].noise;
-        disturberCounts[i] = data[i].disturber;
-        lightningDistances[i] = data[i].lightningDistance;
-        lightningEnergies[i] = data[i].lightningEnergy;
+        noiseCounts[i] = spikeArray[i].noise;
+        disturberCounts[i] = spikeArray[i].disturber;
+        lightningEnergies[i] = spikeArray[i].lightningEnergyPercent;
+        lightningDistances[i] = spikeArray[i].lightningDistance;
     }
 
     // Normalize data
@@ -482,7 +393,7 @@ void displayMessage(const String &message, int textSize, bool immediateUpdate)
         display.display();
 }
 
-void displayLightningInfo(uint8_t dist, long energy, uint8_t percent)
+void displayLightningInfo(uint8_t dist, uint8_t percent)
 {
     char buffer[128]; // Adjust size as needed
 

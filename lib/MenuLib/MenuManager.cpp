@@ -26,12 +26,24 @@ void MenuManager::handleInput(Button button)
     case BUTTON_UP:
         currentIndex--;
         if (currentIndex < 0)
+        {
             currentIndex = currentMenu->getItemCount() - 1;
+            topIndex = max(0, currentMenu->getItemCount() - maxVisibleItems);
+        }
+
+        if (currentIndex < topIndex)
+            topIndex--;
         break;
     case BUTTON_DOWN:
         currentIndex++;
         if (currentIndex >= currentMenu->getItemCount())
+        {
             currentIndex = 0;
+            topIndex = 0;
+        }
+
+        if (currentIndex >= topIndex + maxVisibleItems)
+            topIndex++;
         break;
 
     case BUTTON_RIGHT:
@@ -62,14 +74,15 @@ void MenuManager::updateDisplay()
     display.setTextSize(1);
     display.setCursor(0, 0);
     display.print(currentMenu->getTitle());
-    for (int i = 0; i < currentMenu->getItemCount(); i++)
+
+    int endIndex = min(topIndex + maxVisibleItems, currentMenu->getItemCount());
+    for (int i = topIndex; i < endIndex; i++)
     {
-        display.setCursor(0, (i + 1) * 8);
+        display.setCursor(0, (i - topIndex + 1) * 8);
         if (i == currentIndex)
             display.print("> ");
         else
             display.print("  ");
-
         display.print(currentMenu->getItem(i)->getLabel());
     }
     display.display();

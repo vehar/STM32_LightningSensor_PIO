@@ -19,6 +19,8 @@ private:
     Adafruit_SSD1306 &display;
     Menu *currentMenu;
     int currentIndex;
+    int topIndex;
+    static const int maxVisibleItems = 7;
     void displayMenu();
     void displayParameter(Parameter *parameter);
 };

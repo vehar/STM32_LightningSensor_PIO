@@ -6,14 +6,60 @@
 #include <Wire.h>
 #include <keypad.h>
 #include <main.h>
-#include <STM32RTC.h>
 
-STM32RTC& rtc = STM32RTC::getInstance();
+#include <Adafruit_BMP280.h>
+#include <Thinary_AHT10.h>
 
+AHT10Class AHT10;
+Adafruit_BMP280 bmp;
+
+void handleLightning();
 volatile int AS3935IrqTriggered = 0;
 bool lightningDetected = false;
 bool activateMenuMode = false;
+bool showAtmosphereData = false;
 
+void readAtmosphereData(Atmosphere &data)
+{
+    float temp = AHT10.GetTemperature() + bmp.readTemperature();
+    data.temperature = temp / 2;
+    data.dewPoint = AHT10.GetDewPoint();
+    data.humidity = AHT10.GetHumidity();
+    data.pressure = bmp.readPressure();
+    data.altitude = bmp.readAltitude(1013.25); // Adjust to local sea level pressure
+}
+
+void printAtmosphereData(const Atmosphere &data)
+{
+    char buffer[256];
+
+    char tempStr[10], dewPointStr[10], humidityStr[10], pressureStr[10], altitudeStr[10];
+    dtostrf(data.temperature, 6, 2, tempStr);
+    dtostrf(data.dewPoint, 6, 2, dewPointStr);
+    dtostrf(data.humidity, 6, 2, humidityStr);
+    dtostrf(data.pressure, 6, 2, pressureStr);
+    dtostrf(data.altitude, 6, 2, altitudeStr);
+
+    snprintf(buffer, sizeof(buffer),
+             "Temp:%s C\nDew Point:%s C\nHumidity:%s %%\nPressure:%s Pa\nAltitude:%s m\n", tempStr,
+             dewPointStr, humidityStr, pressureStr, altitudeStr);
+    Serial.print(buffer);
+
+    // Print to Display
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setCursor(0, 0);
+    display.print(buffer);
+    display.display();
+}
+
+///////////
+// Function prototypes for menu actions
+void action1();
+void as3935_InitRecalibrate();
+void action3();
+
+// External variables to be tuned
 int minimumLightnings = 0;
 int noiseFloor = 3;
 int watchDogTh = 1;
@@ -23,7 +69,7 @@ int updateSeconds = 1;
 
 void action1()
 {
-    Serial.println("Action 1 executed");
+    SerialUSB.println("Action 1 executed");
     AS3935Registers regs = getAS3935Registers();
     printAS3935Registers(regs);
     delay(3000);
@@ -31,7 +77,7 @@ void action1()
 
 void as3935_InitRecalibrate()
 {
-    Serial.println("Calibration..");
+    SerialUSB.println("Calibration..");
     detachInterrupt(digitalPinToInterrupt(AS3935_IRQ_PIN));
 
     as3935.setMinimumLightnings(minimumLightnings);
@@ -53,7 +99,7 @@ void as3935_InitRecalibrate()
 
 void action3()
 {
-    Serial.println("Exit executed");
+    SerialUSB.println("Exit executed");
     activateMenuMode = false;
 }
 /////////////
@@ -77,8 +123,6 @@ void setup()
     Wire.setSDA(PB7);
     Wire.begin();
 
-    scanI2CDevices();
-
     if (!display.begin(SSD1306_SWITCHCAPVCC, OLED_ADDR))
     {
         SerialUSB.println(F("SSD1306 allocation failed"));
@@ -96,6 +140,24 @@ void setup()
             ;
     }
 
+    if (AHT10.begin(eAHT10Address_Low))
+        SerialUSB.println(F("AHT20 OK"));
+    else
+        SerialUSB.println(F("AHT20 Fsiled"));
+
+    if (!bmp.begin())
+    {
+        SerialUSB.println(F("Could not find a valid BMP280 sensor, check wiring!"));
+        while (1)
+            ;
+    }
+    /* Default settings from datasheet. */
+    bmp.setSampling(Adafruit_BMP280::MODE_NORMAL,     /* Operating Mode. */
+                    Adafruit_BMP280::SAMPLING_X2,     /* Temp. oversampling */
+                    Adafruit_BMP280::SAMPLING_X16,    /* Pressure oversampling */
+                    Adafruit_BMP280::FILTER_X16,      /* Filtering. */
+                    Adafruit_BMP280::STANDBY_MS_500); /* Standby time. */
+
     as3935.reset();
     AS3935Registers regs = getAS3935Registers();
     printAS3935Registers(regs);
@@ -108,6 +170,8 @@ void setup()
 
     // displayLightningInfo(42, 99);
     delay(1000);
+
+    // scanI2CDevices();
 
     menuManager.updateDisplay(); // Initialize the menu manager with the root menu
 }
@@ -154,6 +218,7 @@ void loop()
     static unsigned long lastTimeUpdateTime = 0;
     static unsigned long lastDetectedTime = 0;
     static unsigned long lastButtonReadTime = 0;
+    static unsigned long lastShowAtmosphereDataTime = 0;
 
     unsigned long currentTime = millis();
 
@@ -162,6 +227,12 @@ void loop()
         Button pressedButton = getPressedButton();
         if ((pressedButton == BUTTON_DOWN) && (activateMenuMode == false))
             activateMenuMode = true;
+
+        if ((pressedButton == BUTTON_UP) && (activateMenuMode == false))
+            showAtmosphereData = true;
+
+        if ((pressedButton == BUTTON_CENTER) && (showAtmosphereData == true))
+            showAtmosphereData = false;
 
         if (activateMenuMode)
         {
@@ -212,7 +283,7 @@ void loop()
             spikeArray[0] = { 0, 0, 0, 0, 0 }; // Clear the first element
         }
 
-        if ((!lightningDetected) && (!activateMenuMode))
+        if ((!lightningDetected) && (!activateMenuMode) && (!showAtmosphereData))
             updateDisplay();
 
         lastDisplayUpdateTime = currentTime;
@@ -232,6 +303,17 @@ void loop()
             lightningDetected = false;
             lastDetectedTime = 0;
         }
+    }
+
+    if (currentTime - lastShowAtmosphereDataTime >= 5000)
+    {
+        if (showAtmosphereData)
+        {
+            Atmosphere atmosphereData;
+            readAtmosphereData(atmosphereData);
+            printAtmosphereData(atmosphereData);
+        }
+        lastShowAtmosphereDataTime = currentTime;
     }
 }
 

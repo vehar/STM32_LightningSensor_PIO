@@ -65,6 +65,15 @@ struct LightningData
 
 LightningData lightningData;
 
+struct Atmosphere
+{
+    float temperature;
+    float dewPoint;
+    float humidity;
+    float pressure;
+    float altitude;
+};
+
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 AS3935 as3935(Wire, AS3935_IRQ_PIN, AS3935_I2C_ADDR);
 
@@ -119,7 +128,9 @@ MenuItem item7(" update scale", MENU_ITEM_PARAMETER, nullptr, &param6);
 MenuItem item8("Recalibrate", MENU_ITEM_ACTION, as3935_InitRecalibrate);
 MenuItem item9("Exit", MENU_ITEM_ACTION, action3);
 
-MenuItem *mainMenuItems[] = { &item1, &item2, &item3, &item4, &item5, &item6, &item7, &item8, &item9 };
+MenuItem *mainMenuItems[] = {
+    &item1, &item2, &item3, &item4, &item5, &item6, &item7, &item8, &item9
+};
 
 const int numberOfMenuItems = sizeof(mainMenuItems) / sizeof(mainMenuItems[0]);
 Menu mainMenu("Main Menu", mainMenuItems, numberOfMenuItems);

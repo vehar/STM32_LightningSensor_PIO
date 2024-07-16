@@ -3,6 +3,8 @@
         "arduino.h": "c",
         "iterator": "cpp",
         "*.tcc": "cpp",
+        "cmath": "cpp"
+        "*.tcc": "cpp",
         "array": "cpp",
         "string": "cpp",
         "vector": "cpp",

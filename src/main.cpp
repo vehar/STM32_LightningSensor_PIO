@@ -1,23 +1,51 @@
 #include <AS3935.h>
+#include <Adafruit_BMP280.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include <Arduino.h>
+#include <Thinary_AHT10.h>
 
 #include <Wire.h>
 #include <keypad.h>
 #include <main.h>
-
-#include <Adafruit_BMP280.h>
-#include <Thinary_AHT10.h>
-
-AHT10Class AHT10;
-Adafruit_BMP280 bmp;
 
 void handleLightning();
 volatile int AS3935IrqTriggered = 0;
 bool lightningDetected = false;
 bool activateMenuMode = false;
 bool showAtmosphereData = false;
+
+void appendToBuffer(char *buffer, int &idx, size_t bufferSize, const char *format, ...)
+{
+    va_list args;
+    va_start(args, format);
+    idx += vsnprintf(buffer + idx, bufferSize - idx, format, args);
+    va_end(args);
+}
+
+void displayMessage(const String &message, int textSize, bool immediateUpdate)
+{
+    display.clearDisplay();
+    display.setTextSize(textSize);
+    display.setTextColor(SSD1306_WHITE);
+    display.setCursor(0, 0);
+    display.println(message);
+
+    if (immediateUpdate)
+        display.display();
+}
+
+typedef void (*CallbackFunction)();
+
+void executePeriodicAction(unsigned long currentTime, unsigned long &lastExecutionTime,
+                           unsigned long interval, CallbackFunction callback)
+{
+    if (currentTime - lastExecutionTime >= interval)
+    {
+        callback();
+        lastExecutionTime = currentTime;
+    }
+}
 
 void readAtmosphereData(Atmosphere &data)
 {
@@ -45,19 +73,14 @@ void printAtmosphereData(const Atmosphere &data)
              dewPointStr, humidityStr, pressureStr, altitudeStr);
     Serial.print(buffer);
 
-    // Print to Display
-    display.clearDisplay();
-    display.setTextSize(1);
-    display.setCursor(0, 0);
-    display.print(buffer);
-    display.display();
+    displayMessage(buffer);
 }
 
 ///////////
 // Function prototypes for menu actions
-void action1();
-void as3935_InitRecalibrate();
-void action3();
+void actionMenuDumpDergs();
+void actionManuAs3935Recalibrate();
+void actionMenuExit();
 
 // External variables to be tuned
 int minimumLightnings = 0;
@@ -67,7 +90,7 @@ int spikeRegection = 0;
 int dispAlgo = 1; // 0 - sum, 1 - shift
 int updateSeconds = 1;
 
-void action1()
+void actionMenuDumpDergs()
 {
     SerialUSB.println("Action 1 executed");
     AS3935Registers regs = getAS3935Registers();
@@ -75,7 +98,7 @@ void action1()
     delay(3000);
 }
 
-void as3935_InitRecalibrate()
+void actionManuAs3935Recalibrate()
 {
     SerialUSB.println("Calibration..");
     detachInterrupt(digitalPinToInterrupt(AS3935_IRQ_PIN));
@@ -97,7 +120,7 @@ void as3935_InitRecalibrate()
     attachInterrupt(digitalPinToInterrupt(AS3935_IRQ_PIN), handleLightning, RISING);
 }
 
-void action3()
+void actionMenuExit()
 {
     SerialUSB.println("Exit executed");
     activateMenuMode = false;
@@ -145,12 +168,11 @@ void setup()
     else
         SerialUSB.println(F("AHT20 Fsiled"));
 
-    if (!bmp.begin())
-    {
-        SerialUSB.println(F("Could not find a valid BMP280 sensor, check wiring!"));
-        while (1)
-            ;
-    }
+    if (bmp.begin())
+        SerialUSB.println(F("BMP280 OK"));
+    else
+        SerialUSB.println(F("BMP280 Fsiled"));
+
     /* Default settings from datasheet. */
     bmp.setSampling(Adafruit_BMP280::MODE_NORMAL,     /* Operating Mode. */
                     Adafruit_BMP280::SAMPLING_X2,     /* Temp. oversampling */
@@ -164,14 +186,13 @@ void setup()
 
     as3935.setOutdoors();
     as3935.enableDisturbers();
-    as3935_InitRecalibrate();
+    actionManuAs3935Recalibrate();
 
     SerialUSB.println("AS3935 initialized and ready.");
-
-    // displayLightningInfo(42, 99);
     delay(1000);
 
-    // scanI2CDevices();
+    scanI2CDevices();
+    delay(2000);
 
     menuManager.updateDisplay(); // Initialize the menu manager with the root menu
 }
@@ -210,12 +231,61 @@ void handleLightningInterrupt(int index)
         SerialUSB.println("Out of range lightning detected.");
 }
 
+void updateTimeCb()
+{
+    currentTimeInfo.seconds++;
+    if (currentTimeInfo.seconds >= 60)
+    {
+        currentTimeInfo.seconds = 0;
+        currentTimeInfo.minutes++;
+        if (currentTimeInfo.minutes >= 60)
+        {
+            currentTimeInfo.minutes = 0;
+            currentTimeInfo.hours++;
+        }
+    }
+}
+
+void updateDisplayCb()
+{
+    static int index = 0;
+
+    if (dispAlgo == 1) // Shift data to the right
+    {
+        for (int i = DATA_POINTS - 1; i > 0; i--)
+            spikeArray[i] = spikeArray[i - 1];
+
+        spikeArray[0] = { 0, 0, 0, 0, 0 }; // Clear the first element
+    }
+    else // Accumulate and display cyclic
+        index = (index + 1) % DATA_POINTS;
+
+    if (!lightningDetected && !activateMenuMode && !showAtmosphereData)
+        updateDisplay();
+}
+
+void collectDataCb()
+{
+    static int index = 0;
+    collectData(index);
+}
+
+void showAtmosphereDataCb()
+{
+    if (!showAtmosphereData)
+        return;
+
+    Atmosphere atmosphereData;
+    readAtmosphereData(atmosphereData);
+    printAtmosphereData(atmosphereData);
+}
+
 void loop()
 {
     static int index = 0;
     static unsigned long lastDataCollectionTime = 0;
-    static unsigned long lastDisplayUpdateTime = 0;
-    static unsigned long lastTimeUpdateTime = 0;
+    static unsigned long lastDisplayUpdTime = 0;
+    static unsigned long lastTimeUpdTime = 0;
     static unsigned long lastDetectedTime = 0;
     static unsigned long lastButtonReadTime = 0;
     static unsigned long lastShowAtmosphereDataTime = 0;
@@ -238,55 +308,7 @@ void loop()
         {
             menuManager.handleInput(pressedButton);
             lastButtonReadTime = currentTime;
-            // char buffer[128]; // Adjust size as needed
-            // sprintf(buffer, "1 = : %d, 2 = : %d  \r\n", externalVar1, externalVar2);
-            // SerialUSB.print(buffer);
         }
-    }
-
-    // Collect data every 100 milliseconds
-    if (currentTime - lastDataCollectionTime >= 100)
-    {
-        collectData(index);
-        lastDataCollectionTime = currentTime;
-    }
-
-    if (currentTime - lastTimeUpdateTime >= 1000)
-    {
-        currentTimeInfo.seconds++;
-        if (currentTimeInfo.seconds >= 60)
-        {
-            currentTimeInfo.seconds = 0;
-            currentTimeInfo.minutes++;
-            if (currentTimeInfo.minutes >= 60)
-            {
-                currentTimeInfo.minutes = 0;
-                currentTimeInfo.hours++;
-            }
-        }
-        lastTimeUpdateTime = currentTime;
-    }
-
-    // Update display every 1000 milliseconds
-    if (currentTime - lastDisplayUpdateTime >= (1000 * updateSeconds))
-    {
-        if (dispAlgo == 0) // Accumulate and display cyclic
-        {
-            index = (index + 1) % DATA_POINTS;
-        }
-        else if (dispAlgo == 1) // Shift data to the right
-        {
-            index = 0;
-            for (int i = DATA_POINTS - 1; i > 0; i--)
-                spikeArray[i] = spikeArray[i - 1];
-
-            spikeArray[0] = { 0, 0, 0, 0, 0 }; // Clear the first element
-        }
-
-        if ((!lightningDetected) && (!activateMenuMode) && (!showAtmosphereData))
-            updateDisplay();
-
-        lastDisplayUpdateTime = currentTime;
     }
 
     if (lightningDetected)
@@ -305,16 +327,17 @@ void loop()
         }
     }
 
-    if (currentTime - lastShowAtmosphereDataTime >= 5000)
-    {
-        if (showAtmosphereData)
-        {
-            Atmosphere atmosphereData;
-            readAtmosphereData(atmosphereData);
-            printAtmosphereData(atmosphereData);
-        }
-        lastShowAtmosphereDataTime = currentTime;
-    }
+    // Collect data every 100 milliseconds
+    executePeriodicAction(currentTime, lastDataCollectionTime, 100, collectDataCb);
+
+    // Update time every 1000 milliseconds
+    executePeriodicAction(currentTime, lastTimeUpdTime, 1000, updateTimeCb);
+
+    // Update display every updateSeconds
+    executePeriodicAction(currentTime, lastDisplayUpdTime, 1000 * updateSeconds, updateDisplayCb);
+
+    // Show atmosphere data if needed
+    executePeriodicAction(currentTime, lastShowAtmosphereDataTime, 2000, showAtmosphereDataCb);
 }
 
 void collectData(int index)
@@ -325,17 +348,11 @@ void collectData(int index)
 
         int irqSource = as3935.interruptSource();
         if (irqSource & 0x01)
-        {
             handleNoiseInterrupt(index);
-        }
         else if (irqSource & 0x04)
-        {
             handleDisturberInterrupt(index);
-        }
         else if (irqSource & 0x08)
-        {
             handleLightningInterrupt(index);
-        }
     }
 }
 
@@ -347,10 +364,9 @@ void normalizeData(uint8_t *data, uint8_t length, uint8_t maxValue, uint8_t &max
         if (data[i] > maxDataValue)
             maxDataValue = data[i];
     }
+
     for (uint8_t i = 0; i < length; i++)
-    {
         data[i] = (data[i] * maxValue) / maxDataValue;
-    }
 }
 
 void drawHistogramSection(uint8_t *data, int yStart, int line)
@@ -371,7 +387,6 @@ void updateDisplay()
 {
     display.clearDisplay();
 
-    // Draw uptime
     char buffer[128]; // Display uptime
 
     sprintf(buffer, "%02lu:%02lu:%02lu L %dkm E %d%%\n", currentTimeInfo.hours,
@@ -380,54 +395,29 @@ void updateDisplay()
 
     displayMessage(buffer, 1, false);
 
-    uint8_t maxNoise, maxDisturber, maxDistance, maxEnergy;
+    uint8_t row_max[4];
+    uint8_t rows[4][DATA_POINTS];
 
-    uint8_t noiseCounts[DATA_POINTS];
-    uint8_t disturberCounts[DATA_POINTS];
-    uint8_t lightningDistances[DATA_POINTS];
-    uint8_t lightningEnergies[DATA_POINTS];
-
-    // Collect raw data
+    // Collect and normalize raw data
     for (int i = 0; i < DATA_POINTS; i++)
     {
-        noiseCounts[i] = spikeArray[i].noise;
-        disturberCounts[i] = spikeArray[i].disturber;
-        lightningEnergies[i] = spikeArray[i].lightningEnergyPercent;
-        lightningDistances[i] = spikeArray[i].lightningDistance;
+        rows[0][i] = spikeArray[i].lightningDistance;
+        rows[1][i] = spikeArray[i].lightningEnergyPercent;
+        rows[2][i] = spikeArray[i].disturber;
+        rows[3][i] = spikeArray[i].noise;
     }
 
-    // Normalize data
-    normalizeData(lightningDistances, DATA_POINTS, HISTOGRAM_HEIGHT, maxDistance);
-    normalizeData(lightningEnergies, DATA_POINTS, HISTOGRAM_HEIGHT, maxEnergy);
-    normalizeData(disturberCounts, DATA_POINTS, HISTOGRAM_HEIGHT, maxDisturber);
-    normalizeData(noiseCounts, DATA_POINTS, HISTOGRAM_HEIGHT, maxNoise);
-
-    // Draw histograms
-    int y = 21;
-    drawHistogramSection(lightningDistances, y, 0);
-    drawHistogramSection(lightningEnergies, y, 1);
-    drawHistogramSection(disturberCounts, y, 2);
-    drawHistogramSection(noiseCounts, y, 3);
-
-    y += 5;
-    // Display max values
-    printMaxValue(maxDistance, y, 0);
-    printMaxValue(maxEnergy, y, 1);
-    printMaxValue(maxDisturber, y, 2);
-    printMaxValue(maxNoise, y, 3);
+    for (int i = 0; i < 4; i++)
+    {
+        normalizeData(rows[i], DATA_POINTS, HISTOGRAM_HEIGHT, row_max[i]);
+        drawHistogramSection(rows[i], 21, i);
+        printMaxValue(row_max[i], 26, i);
+    }
 
     display.display();
 }
 
 void handleLightning() { AS3935IrqTriggered = 1; }
-
-void appendToBuffer(char *buffer, int &idx, size_t bufferSize, const char *format, ...)
-{
-    va_list args;
-    va_start(args, format);
-    idx += vsnprintf(buffer + idx, bufferSize - idx, format, args);
-    va_end(args);
-}
 
 void scanI2CDevices()
 {
@@ -449,30 +439,17 @@ void scanI2CDevices()
             appendToBuffer(buff, idx, sizeof(buff), "Unknown error at addr 0x%02X\n", address);
     }
 
-    if (deviceCount == 0)
+    if (deviceCount != 0)
     {
-        appendToBuffer(buff, idx, sizeof(buff), "No I2C devices found\n");
-    }
-    else
-    {
-        appendToBuffer(buff, idx, sizeof(buff), "Found %d I2C device(s):\n", deviceCount);
+        appendToBuffer(buff, idx, sizeof(buff), "Found %d I2C devices:\n", deviceCount);
         for (int i = 0; i < deviceCount; i++)
             appendToBuffer(buff, idx, sizeof(buff), " - 0x%02X\n", foundDevices[i]);
     }
+    else
+        appendToBuffer(buff, idx, sizeof(buff), "No I2C devices found\n");
 
     SerialUSB.print(buff);
-}
-
-void displayMessage(const String &message, int textSize, bool immediateUpdate)
-{
-    display.clearDisplay();
-    display.setTextSize(textSize);
-    display.setTextColor(SSD1306_WHITE);
-    display.setCursor(0, 0);
-    display.println(message);
-
-    if (immediateUpdate)
-        display.display();
+    displayMessage(buff);
 }
 
 void displayLightningInfo(uint8_t dist, uint8_t percent)
@@ -481,7 +458,6 @@ void displayLightningInfo(uint8_t dist, uint8_t percent)
 
     sprintf(buffer, " L: %d km\n E: %d %%", dist, percent);
 
-    display.clearDisplay();
     displayMessage("Lightning!", 2);
 
     // display.setTextSize(1);
@@ -521,12 +497,6 @@ void printAS3935Registers(AS3935Registers regs)
             regs.noiseFloor, regs.spikeRejection, regs.watchdogThreshold,
             regs.minNumberOfLightnings, regs.distance, regs.trco, regs.srco, regs.afe, regs.capVal);
 
-    display.clearDisplay();
-    display.setTextSize(1);
-    display.setTextColor(SSD1306_WHITE);
-    display.setCursor(0, 0);
-    display.print(buffer);
-    display.display();
-
     SerialUSB.print(buffer);
+    displayMessage(buffer);
 }

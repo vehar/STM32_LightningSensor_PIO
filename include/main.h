@@ -76,13 +76,15 @@ struct Atmosphere
 
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 AS3935 as3935(Wire, AS3935_IRQ_PIN, AS3935_I2C_ADDR);
+AHT10Class AHT10;
+Adafruit_BMP280 bmp;
 
 void handleLightning();
 
 void setup();
 void loop();
 void scanI2CDevices();
-void displayMessage(const String &message, int textSize, bool immediateUpdate = true);
+void displayMessage(const String &message, int textSize = 1, bool immediateUpdate = true);
 void displayLightningInfo(uint8_t dist, uint8_t percent);
 AS3935Registers getAS3935Registers();
 void printAS3935Registers(AS3935Registers regs);
@@ -95,9 +97,9 @@ void normalizeData(uint8_t *data, uint8_t length, uint8_t maxValue, uint8_t &max
 
 ///////////
 // Function prototypes for menu actions
-void action1();
-void as3935_InitRecalibrate();
-void action3();
+void actionMenuDumpDergs();
+void actionManuAs3935Recalibrate();
+void actionMenuExit();
 
 // External variables to be tuned
 extern int minimumLightnings;
@@ -116,7 +118,7 @@ Parameter param5("0-sum\n1-shift", dispAlgo, 0, 1);
 Parameter param6("every(s)", updateSeconds, 1, 3600);
 
 // Menu items and menus
-MenuItem item1("View settings", MENU_ITEM_ACTION, action1);
+MenuItem item1("View settings", MENU_ITEM_ACTION, actionMenuDumpDergs);
 
 MenuItem item2(" minimumLightnings", MENU_ITEM_PARAMETER, nullptr, &param1);
 MenuItem item3(" noiseFloor", MENU_ITEM_PARAMETER, nullptr, &param2);
@@ -125,8 +127,8 @@ MenuItem item5(" spikeRegection", MENU_ITEM_PARAMETER, nullptr, &param4);
 MenuItem item6(" dispAlgo", MENU_ITEM_PARAMETER, nullptr, &param5);
 MenuItem item7(" update scale", MENU_ITEM_PARAMETER, nullptr, &param6);
 
-MenuItem item8("Recalibrate", MENU_ITEM_ACTION, as3935_InitRecalibrate);
-MenuItem item9("Exit", MENU_ITEM_ACTION, action3);
+MenuItem item8("Recalibrate", MENU_ITEM_ACTION, actionManuAs3935Recalibrate);
+MenuItem item9("Exit", MENU_ITEM_ACTION, actionMenuExit);
 
 MenuItem *mainMenuItems[] = {
     &item1, &item2, &item3, &item4, &item5, &item6, &item7, &item8, &item9

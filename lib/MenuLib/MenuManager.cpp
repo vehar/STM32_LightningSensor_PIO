@@ -65,10 +65,10 @@ void MenuManager::handleInput(Button button)
     default:
         break;
     }
-    updateDisplay();
+    updateMenu();
 }
 
-void MenuManager::updateDisplay()
+void MenuManager::updateMenu()
 {
     display.clearDisplay();
     display.setTextSize(1);

@@ -47,6 +47,22 @@ void executePeriodicAction(unsigned long currentTime, unsigned long &lastExecuti
     }
 }
 
+void handleError(const char *errorMessage)
+{
+    SerialUSB.println(errorMessage);
+    displayMessage(errorMessage);
+    // Additional error handling actions can be added here, such as logging or triggering an error
+
+    while (true)
+    {
+        // Optionally blink an LED or do something to indicate an error state
+        digitalWrite(LED_PIN, LOW); // Turn the LED on
+        delay(500);
+        digitalWrite(LED_PIN, HIGH); // Turn the LED off
+        delay(500);
+    }
+}
+
 void readAtmosphereData(Atmosphere &data)
 {
     float temp = AHT10.GetTemperature() + bmp.readTemperature();
@@ -147,32 +163,18 @@ void setup()
     Wire.begin();
 
     if (!display.begin(SSD1306_SWITCHCAPVCC, OLED_ADDR))
-    {
-        SerialUSB.println(F("SSD1306 allocation failed"));
-        while (1)
-            ;
-    }
-
-    displayMessage("Lightning sensor!", 1);
-    SerialUSB.println(F("Display initialized and message displayed."));
+        handleError("SSD1306 allocation failed");
 
     if (!as3935.begin())
-    {
-        SerialUSB.println("AS3935 initialization failed!");
-        while (1)
-            ;
-    }
+        handleError("AS3935 initialization failed!");
 
     if (AHT10.begin(eAHT10Address_Low))
-        SerialUSB.println(F("AHT20 OK"));
-    else
-        SerialUSB.println(F("AHT20 Fsiled"));
+        handleError("AHT10 initialization failed!");
 
     if (bmp.begin())
-        SerialUSB.println(F("BMP280 OK"));
-    else
-        SerialUSB.println(F("BMP280 Fsiled"));
+        handleError("BMP280 initialization failed!");
 
+    displayMessage("Lightning sensor!", 1);
     /* Default settings from datasheet. */
     bmp.setSampling(Adafruit_BMP280::MODE_NORMAL,     /* Operating Mode. */
                     Adafruit_BMP280::SAMPLING_X2,     /* Temp. oversampling */
@@ -194,7 +196,7 @@ void setup()
     scanI2CDevices();
     delay(2000);
 
-    menuManager.updateDisplay(); // Initialize the menu manager with the root menu
+    menuManager.updateMenu(); // Initialize the menu manager with the root menu
 }
 
 void handleNoiseInterrupt(int index)

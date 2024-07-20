@@ -13,7 +13,7 @@ public:
     MenuManager(Adafruit_SSD1306 &display, Menu *rootMenu);
     void waitTillButtonReleased(Button bt);
     void handleInput(Button button);
-    void updateDisplay();
+    void updateMenu();
 
 private:
     Adafruit_SSD1306 &display;

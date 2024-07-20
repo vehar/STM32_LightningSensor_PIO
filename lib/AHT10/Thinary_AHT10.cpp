@@ -59,10 +59,7 @@ boolean AHT10Class::begin(unsigned char _AHT10_address)
     if((readStatus()&0x68) == 0x08)
         return true;
     else
-    {
-        return false;
-    }
-    
+        return false;    
 }
 
 /**********************************************************
@@ -74,9 +71,9 @@ boolean AHT10Class::begin(unsigned char _AHT10_address)
 float AHT10Class::GetHumidity(void)
 {
     float value = readSensor(GetRHumidityCmd);
-    if (value == 0) {
+    if (value == 0) 
         return 0;                       // Some unrealistic value
-    }
+    
     return value * 100 / 1048576;
 }
 
@@ -127,18 +124,12 @@ unsigned long AHT10Class::readSensor(boolean GetDataCmd)
     Wire.requestFrom(AHT10_address, 6);
 
     for(unsigned char i = 0; Wire.available() > 0; i++)
-    {
         temp[i] = Wire.read();
-    }   
 
     if(GetDataCmd)
-    {
         result = ((temp[1] << 16) | (temp[2] << 8) | temp[3]) >> 4;
-    }
     else
-    {
         result = ((temp[3] & 0x0F) << 16) | (temp[4] << 8) | temp[5];
-    }
 
     return result;
 }

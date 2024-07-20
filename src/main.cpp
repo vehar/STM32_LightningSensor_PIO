@@ -15,6 +15,8 @@ bool lightningDetected = false;
 bool activateMenuMode = false;
 bool showAtmosphereData = false;
 
+int dataIdx = 0;
+
 void appendToBuffer(char *buffer, int &idx, size_t bufferSize, const char *format, ...)
 {
     va_list args;
@@ -33,6 +35,8 @@ void displayMessage(const String &message, int textSize, bool immediateUpdate)
 
     if (immediateUpdate)
         display.display();
+
+    SerialUSB.print(message);
 }
 
 typedef void (*CallbackFunction)();
@@ -53,7 +57,7 @@ void handleError(const char *errorMessage)
     displayMessage(errorMessage);
     // Additional error handling actions can be added here, such as logging or triggering an error
 
-    while (true)
+    while (1)
     {
         // Optionally blink an LED or do something to indicate an error state
         digitalWrite(LED_PIN, LOW); // Turn the LED on
@@ -114,6 +118,8 @@ void actionMenuDumpDergs()
     delay(3000);
 }
 
+void handleLightning() { AS3935IrqTriggered = 1; }
+
 void actionManuAs3935Recalibrate()
 {
     SerialUSB.println("Calibration..");
@@ -171,7 +177,7 @@ void setup()
     if (AHT10.begin(eAHT10Address_Low))
         handleError("AHT10 initialization failed!");
 
-    if (bmp.begin())
+    if (!bmp.begin())
         handleError("BMP280 initialization failed!");
 
     displayMessage("Lightning sensor!", 1);
@@ -202,13 +208,13 @@ void setup()
 void handleNoiseInterrupt(int index)
 {
     spikeArray[index].noise++;
-    SerialUSB.println("Noise level too high, try adjusting noise floor");
+    // SerialUSB.println("Noise level too high, try adjusting noise floor");
 }
 
 void handleDisturberInterrupt(int index)
 {
     spikeArray[index].disturber++;
-    SerialUSB.println("Disturber detected");
+    // SerialUSB.println("Disturber detected");
 }
 
 void handleLightningInterrupt(int index)
@@ -224,8 +230,6 @@ void handleLightningInterrupt(int index)
     spikeArray[index].lightningCount++;
     spikeArray[index].lightningDistance = distance;
     spikeArray[index].lightningEnergyPercent = lightningData.spike.lightningEnergyPercent;
-
-    //   displayLightningInfo(lightningData.distance, lightningData.energyPercent);
 
     if (distance == 1)
         SerialUSB.println("Storm overhead, watch out!");
@@ -250,8 +254,6 @@ void updateTimeCb()
 
 void updateDisplayCb()
 {
-    static int index = 0;
-
     if (dispAlgo == 1) // Shift data to the right
     {
         for (int i = DATA_POINTS - 1; i > 0; i--)
@@ -260,17 +262,13 @@ void updateDisplayCb()
         spikeArray[0] = { 0, 0, 0, 0, 0 }; // Clear the first element
     }
     else // Accumulate and display cyclic
-        index = (index + 1) % DATA_POINTS;
+        dataIdx = (dataIdx + 1) % DATA_POINTS;
 
     if (!lightningDetected && !activateMenuMode && !showAtmosphereData)
         updateDisplay();
 }
 
-void collectDataCb()
-{
-    static int index = 0;
-    collectData(index);
-}
+void collectDataCb() { collectData(dataIdx); }
 
 void showAtmosphereDataCb()
 {
@@ -284,7 +282,6 @@ void showAtmosphereDataCb()
 
 void loop()
 {
-    static int index = 0;
     static unsigned long lastDataCollectionTime = 0;
     static unsigned long lastDisplayUpdTime = 0;
     static unsigned long lastTimeUpdTime = 0;
@@ -415,15 +412,45 @@ void updateDisplay()
         drawHistogramSection(rows[i], 21, i);
         printMaxValue(row_max[i], 26, i);
     }
-
     display.display();
-}
 
-void handleLightning() { AS3935IrqTriggered = 1; }
+    SerialUSB.print("{\"histogram\":{"); // Print histogram data to Serial in JSON format
+    for (int i = 0; i < 4; i++)
+    {
+        SerialUSB.print("\"row");
+        SerialUSB.print(i);
+        SerialUSB.print("\":[");
+        for (int j = 0; j < DATA_POINTS; j++)
+        {
+            SerialUSB.print(rows[i][j]);
+            if (j < DATA_POINTS - 1)
+                SerialUSB.print(",");
+        }
+        SerialUSB.print("]");
+        if (i < 3)
+            SerialUSB.print(",");
+    }
+    SerialUSB.println("}}");
+
+    /*
+        // Shorter format for the newest data
+        int newestIndex = 1; // Pick
+        SerialUSB.print("{\"newest data\":{");
+        SerialUSB.print("\"lightningDistance\":");
+        SerialUSB.print(spikeArray[newestIndex].lightningDistance);
+        SerialUSB.print(",\"lightningEnergyPercent\":");
+        SerialUSB.print(spikeArray[newestIndex].lightningEnergyPercent);
+        SerialUSB.print(",\"disturber\":");
+        SerialUSB.print(spikeArray[newestIndex].disturber);
+        SerialUSB.print(",\"noise\":");
+        SerialUSB.print(spikeArray[newestIndex].noise);
+        SerialUSB.println("}}");
+        */
+}
 
 void scanI2CDevices()
 {
-    char buff[1024];
+    char buff[512];
     int idx = 0;
     byte foundDevices[127];
     int deviceCount = 0;
@@ -450,7 +477,6 @@ void scanI2CDevices()
     else
         appendToBuffer(buff, idx, sizeof(buff), "No I2C devices found\n");
 
-    SerialUSB.print(buff);
     displayMessage(buff);
 }
 
@@ -499,6 +525,5 @@ void printAS3935Registers(AS3935Registers regs)
             regs.noiseFloor, regs.spikeRejection, regs.watchdogThreshold,
             regs.minNumberOfLightnings, regs.distance, regs.trco, regs.srco, regs.afe, regs.capVal);
 
-    SerialUSB.print(buffer);
     displayMessage(buffer);
 }

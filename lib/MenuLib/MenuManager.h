@@ -22,6 +22,7 @@ private:
     int topIndex;
     static const int maxVisibleItems = 7;
     void displayMenu();
+    Button debounceButton();
     void displayParameter(Parameter *parameter);
 };
 

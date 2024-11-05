@@ -3,9 +3,11 @@
 
 #include <Arduino.h>
 
+#include "MenuManager.h"
+#include "SSD1306_DisplayAdapter.h"
+#include <Adafruit_SSD1306.h>
 #include <Menu.h>
 #include <MenuItem.h>
-#include <MenuManager.h>
 #include <Parameter.h>
 
 #define LED_PIN PC13
@@ -74,7 +76,9 @@ struct Atmosphere
     float altitude;
 };
 
-Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+Adafruit_SSD1306 oledDisplay(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+AdafruitDisplayAdapter displayAdapter(oledDisplay);
+
 AS3935 as3935(Wire, AS3935_IRQ_PIN, AS3935_I2C_ADDR);
 AHT10Class AHT10;
 Adafruit_BMP280 bmp;
@@ -136,7 +140,6 @@ MenuItem *mainMenuItems[] = {
 
 const int numberOfMenuItems = sizeof(mainMenuItems) / sizeof(mainMenuItems[0]);
 Menu mainMenu("Main Menu", mainMenuItems, numberOfMenuItems);
-
-MenuManager menuManager(display, &mainMenu);
+MenuManager menuManager(displayAdapter, &mainMenu);
 
 #endif // MAIN_H

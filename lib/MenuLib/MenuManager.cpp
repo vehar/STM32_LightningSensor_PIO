@@ -1,6 +1,6 @@
 #include "MenuManager.h"
 #include "Parameter.h"
-MenuManager::MenuManager(Adafruit_SSD1306 &display, Menu *rootMenu)
+MenuManager::MenuManager(DisplayInterface &display, Menu *rootMenu)
     : display(display), currentMenu(rootMenu), currentIndex(0)
 {
 }
@@ -18,6 +18,35 @@ Button MenuManager::debounceButton()
     if (lastButton == getPressedButton())
         return lastButton;
     return BUTTON_NONE;
+}
+
+void MenuManager::clearAndSetupDisplay(int textSize, int cursorX, int cursorY)
+{
+    display.clear();
+    display.setTextSize(textSize);
+    display.setCursor(cursorX, cursorY);
+}
+
+void MenuManager::displayText(const char *text) { display.print(text); }
+
+void MenuManager::displayParameterDetails(Parameter *parameter)
+{
+    clearAndSetupDisplay(2);
+    displayText("SET\n");
+    displayText(parameter->getName());
+    displayText("\n=  ");
+    display.print(parameter->getValue()); // Display parameter value
+    display.display();
+}
+
+void MenuManager::displayMenuItem(int index, const char *label, bool isSelected)
+{
+    display.setCursor(0, (index + 1) * 8); // Adjust y-position based on index
+    if (isSelected)
+        displayText("> ");
+    else
+        displayText("  ");
+    displayText(label);
 }
 
 void MenuManager::handleInput(Button button)
@@ -80,23 +109,19 @@ void MenuManager::displayParameter(Parameter *parameter)
 
     while (tuneFlag)
     {
-        display.clearDisplay();
-        display.setTextSize(2);
-        display.setCursor(0, 0);
-        display.printf("SET\n%s\n=  %d", parameter->getName(), parameter->getValue());
-        display.display();
+        displayParameterDetails(parameter);
 
         Button bt = debounceButton();
         switch (bt)
         {
         case BUTTON_LEFT:
         case BUTTON_DOWN:
-            parameter->decrement(); // TODO add mechanism for feedback if limit reached
+            parameter->decrement(); // Add feedback if needed
             break;
 
         case BUTTON_RIGHT:
         case BUTTON_UP:
-            parameter->increment(); // TODO add mechanism for feedback
+            parameter->increment(); // Add feedback if needed
             break;
 
         case BUTTON_CENTER:
@@ -111,10 +136,8 @@ void MenuManager::displayParameter(Parameter *parameter)
 
 void MenuManager::updateMenu()
 {
-    display.clearDisplay();
-    display.setTextSize(1);
-    display.setCursor(0, 0);
-    display.print(currentMenu->getTitle());
+    clearAndSetupDisplay(1);
+    displayText(currentMenu->getTitle());
 
     int itemCount = currentMenu->getItemCount();
     currentIndex = constrain(currentIndex, 0, itemCount - 1);
@@ -123,13 +146,8 @@ void MenuManager::updateMenu()
     int endIndex = min(topIndex + maxVisibleItems, itemCount);
     for (int i = topIndex; i < endIndex; i++)
     {
-        display.setCursor(0, (i - topIndex + 1) * 8);
-        if (i == currentIndex)
-            display.print("> ");
-        else
-            display.print("  ");
-
-        display.print(currentMenu->getItem(i)->getLabel());
+        bool isSelected = (i == currentIndex);
+        displayMenuItem(i - topIndex, currentMenu->getItem(i)->getLabel(), isSelected);
     }
     display.display();
 }

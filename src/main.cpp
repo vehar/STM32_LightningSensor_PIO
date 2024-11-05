@@ -1,7 +1,6 @@
 #include <AS3935.h>
 #include <Adafruit_BMP280.h>
 #include <Adafruit_GFX.h>
-#include <Adafruit_SSD1306.h>
 #include <Arduino.h>
 #include <Thinary_AHT10.h>
 
@@ -27,14 +26,14 @@ void appendToBuffer(char *buffer, int &idx, size_t bufferSize, const char *forma
 
 void displayMessage(const String &message, int textSize, bool immediateUpdate)
 {
-    display.clearDisplay();
-    display.setTextSize(textSize);
-    display.setTextColor(SSD1306_WHITE);
-    display.setCursor(0, 0);
-    display.println(message);
+    displayAdapter.clear();
+    displayAdapter.setTextSize(textSize);
+    displayAdapter.setTextColor(SSD1306_WHITE);
+    displayAdapter.setCursor(0, 0);
+    displayAdapter.println(message);
 
     if (immediateUpdate)
-        display.display();
+        displayAdapter.display();
 
     SerialUSB.print(message);
 }
@@ -168,7 +167,7 @@ void setup()
     Wire.setSDA(PB7);
     Wire.begin();
 
-    if (!display.begin(SSD1306_SWITCHCAPVCC, OLED_ADDR))
+    if (!displayAdapter.begin(SSD1306_SWITCHCAPVCC, OLED_ADDR))
         handleError("SSD1306 allocation failed");
 
     if (!as3935.begin())
@@ -372,19 +371,20 @@ void drawHistogramSection(uint8_t *data, int yStart, int line)
 {
     int yOffset = HISTOGRAM_HEIGHT * line;
     for (int i = 0; i < DATA_POINTS; i++)
-        display.drawLine(i * 2, yStart + yOffset, i * 2, yStart + yOffset - data[i], SSD1306_WHITE);
+        displayAdapter.drawLine(i * 2, yStart + yOffset, i * 2, yStart + yOffset - data[i],
+                                SSD1306_WHITE);
 }
 
 void printMaxValue(int maxValue, int yStart, int line)
 {
     int yPosition = yStart + HISTOGRAM_HEIGHT * line - HISTOGRAM_HEIGHT;
-    display.setCursor(SCREEN_WIDTH - 15, yPosition);
-    display.printf("%d", maxValue);
+    displayAdapter.setCursor(SCREEN_WIDTH - 15, yPosition);
+    displayAdapter.print(maxValue);
 }
 
 void updateDisplay()
 {
-    display.clearDisplay();
+    displayAdapter.clear();
 
     char buffer[128]; // Display uptime
 
@@ -412,7 +412,7 @@ void updateDisplay()
         drawHistogramSection(rows[i], 21, i);
         printMaxValue(row_max[i], 26, i);
     }
-    display.display();
+    displayAdapter.display();
 
     SerialUSB.print("{\"histogram\":{"); // Print histogram data to Serial in JSON format
     for (int i = 0; i < 4; i++)
@@ -489,9 +489,9 @@ void displayLightningInfo(uint8_t dist, uint8_t percent)
     displayMessage("Lightning!", 2);
 
     // display.setTextSize(1);
-    display.setCursor(0, 30);
-    display.print(buffer);
-    display.display();
+    displayAdapter.setCursor(0, 30);
+    displayAdapter.print(buffer);
+    displayAdapter.display();
 
     SerialUSB.print(buffer);
 }

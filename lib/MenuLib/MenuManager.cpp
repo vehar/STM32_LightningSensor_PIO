@@ -49,6 +49,18 @@ void MenuManager::displayMenuItem(int index, const char *label, bool isSelected)
     displayText(label);
 }
 
+void MenuManager::switchScale()
+{
+    if (currentScale == 1)
+        currentScale = 10;
+    else if (currentScale == 10)
+        currentScale = 100;
+    else if (currentScale == 100)
+        currentScale = 1000;
+    else
+        currentScale = 1;
+}
+
 void MenuManager::handleInput(Button button)
 {
     MenuItem *item = nullptr;
@@ -111,21 +123,31 @@ void MenuManager::displayParameter(Parameter *parameter)
     {
         displayParameterDetails(parameter);
 
+        // Display the current scale on a specific part of the screen
+        display.setCursor(0, 40);
+        display.print("Scale: x");
+        display.print(currentScale);
+        display.display();
+
         Button bt = debounceButton();
         switch (bt)
         {
         case BUTTON_LEFT:
         case BUTTON_DOWN:
-            parameter->decrement(); // Add feedback if needed
+            parameter->decrement(currentScale);
             break;
 
         case BUTTON_RIGHT:
         case BUTTON_UP:
-            parameter->increment(); // Add feedback if needed
+            parameter->increment(currentScale);
             break;
 
         case BUTTON_CENTER:
             tuneFlag = false; // Exit adjustment mode
+            break;
+
+        case BUTTON_SCALE: // A new button (e.g., long press or other) to switch scales
+            switchScale(); // Switch to the next scale
             break;
 
         default:

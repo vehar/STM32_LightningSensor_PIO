@@ -293,14 +293,15 @@ void loop()
     if (currentTime - lastButtonReadTime >= 200)
     {
         Button pressedButton = getPressedButton();
-        if ((pressedButton == BUTTON_DOWN) && (activateMenuMode == false))
-            activateMenuMode = true;
 
         if ((pressedButton == BUTTON_UP) && (activateMenuMode == false))
             showAtmosphereData = true;
 
         if ((pressedButton == BUTTON_CENTER) && (showAtmosphereData == true))
             showAtmosphereData = false;
+
+        if ((pressedButton == BUTTON_DOWN) && (activateMenuMode == false))
+            activateMenuMode = true;
 
         if (activateMenuMode)
         {

@@ -23,7 +23,8 @@ enum Button
     BUTTON_LEFT,
     BUTTON_DOWN,
     BUTTON_RIGHT,
-    BUTTON_CENTER
+    BUTTON_CENTER,
+    BUTTON_SCALE
 };
 
 // Structure to hold button threshold data

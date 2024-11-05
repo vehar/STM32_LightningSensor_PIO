@@ -11,6 +11,7 @@ class MenuManager
 public:
     MenuManager(DisplayInterface &display, Menu *rootMenu);
     void waitTillButtonReleased(Button bt);
+    void switchScale();
     void handleInput(Button button);
     void updateMenu();
 
@@ -28,6 +29,8 @@ private:
     void displayMenuItem(int index, const char *label, bool isSelected);
 
     void displayParameter(Parameter *parameter);
+
+    int currentScale = 1; // Default to units of 1
 };
 
 #endif

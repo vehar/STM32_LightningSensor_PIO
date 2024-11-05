@@ -9,24 +9,22 @@ const char *Parameter::getName() { return name; }
 
 int Parameter::getValue() { return value; }
 
-int Parameter::increment()
+int Parameter::increment(int scale)
 {
-    if (value < maxValue)
+    if (value + scale <= maxValue)
     {
-        value++;
+        value += scale;
         return 0;
     }
-
-    return -1;
+    return -1; // Indicate limit reached
 }
 
-int Parameter::decrement()
+int Parameter::decrement(int scale)
 {
-    if (value > minValue)
+    if (value - scale >= minValue)
     {
-        value--;
+        value -= scale;
         return 0;
     }
-
-    return -1;
+    return -1; // Indicate limit reached
 }

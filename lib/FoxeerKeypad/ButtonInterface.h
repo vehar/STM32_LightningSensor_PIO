@@ -10,8 +10,7 @@ enum Button
     BUTTON_LEFT,
     BUTTON_DOWN,
     BUTTON_RIGHT,
-    BUTTON_CENTER,
-    BUTTON_SCALE
+    BUTTON_CENTER
 };
 
 class ButtonInterface

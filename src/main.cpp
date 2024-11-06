@@ -119,7 +119,7 @@ void printAtmosphereData(const Atmosphere &data)
 
 ///////////
 // Function prototypes for menu actions
-void actionMenuDumpDergs();
+void actionMenuDumpRegs();
 void actionManuAs3935Recalibrate();
 void actionMenuExit();
 
@@ -131,7 +131,7 @@ int spikeRegection = 0;
 int dispAlgo = 1; // 0 - sum, 1 - shift
 int updateSeconds = 1;
 
-void actionMenuDumpDergs()
+void actionMenuDumpRegs()
 {
     SerialUSB.println("Action 1 executed");
     AS3935Registers regs = getAS3935Registers();

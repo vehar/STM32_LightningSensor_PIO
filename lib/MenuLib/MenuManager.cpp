@@ -17,11 +17,9 @@ void MenuManager::waitTillButtonReleased(Button bt)
 
 Button MenuManager::debounceButton()
 {
-    Button lastButton =
-        buttonInterface->getPressedButton(); // Use buttonInterface->getPressedButton()
-    delay(50);                               // Short delay for debounce
-    if (lastButton ==
-        buttonInterface->getPressedButton()) // Use buttonInterface->getPressedButton()
+    Button lastButton = buttonInterface->getPressedButton();
+    delay(50); // Short delay for debounce
+    if (lastButton == buttonInterface->getPressedButton())
         return lastButton;
     return BUTTON_NONE;
 }

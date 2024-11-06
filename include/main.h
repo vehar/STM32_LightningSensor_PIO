@@ -100,9 +100,9 @@ void normalizeData(uint8_t *data, uint8_t length, uint8_t maxValue, uint8_t &max
 
 ///////////
 // Function prototypes for menu actions
-void actionMenuDumpDergs();
-void actionManuAs3935Recalibrate();
-void actionMenuExit();
+extern void actionMenuDumpRegs();
+extern void actionManuAs3935Recalibrate();
+extern void actionMenuExit();
 
 // External variables to be tuned
 extern int minimumLightnings;
@@ -121,20 +121,20 @@ Parameter param5("0-sum\n1-shift", dispAlgo, 0, 1);
 Parameter param6("every(s)", updateSeconds, 1, 3600);
 
 // Menu items and menus
-MenuItem item1("View settings", MENU_ITEM_ACTION, actionMenuDumpDergs);
+MenuItem item0("View settings", MENU_ITEM_ACTION, actionMenuDumpRegs);
 
-MenuItem item2(" minimumLightnings", MENU_ITEM_PARAMETER, nullptr, &param1);
-MenuItem item3(" noiseFloor", MENU_ITEM_PARAMETER, nullptr, &param2);
-MenuItem item4(" watchDogTh", MENU_ITEM_PARAMETER, nullptr, &param3);
-MenuItem item5(" spikeRegection", MENU_ITEM_PARAMETER, nullptr, &param4);
-MenuItem item6(" dispAlgo", MENU_ITEM_PARAMETER, nullptr, &param5);
-MenuItem item7(" update scale", MENU_ITEM_PARAMETER, nullptr, &param6);
+MenuItem item1(" minimumLightnings", MENU_ITEM_PARAMETER, nullptr, &param1);
+MenuItem item2(" noiseFloor", MENU_ITEM_PARAMETER, nullptr, &param2);
+MenuItem item3(" watchDogTh", MENU_ITEM_PARAMETER, nullptr, &param3);
+MenuItem item4(" spikeRegection", MENU_ITEM_PARAMETER, nullptr, &param4);
+MenuItem item5(" dispAlgo", MENU_ITEM_PARAMETER, nullptr, &param5);
+MenuItem item6(" update scale", MENU_ITEM_PARAMETER, nullptr, &param6);
 
-MenuItem item8("Recalibrate", MENU_ITEM_ACTION, actionManuAs3935Recalibrate);
-MenuItem item9("Exit", MENU_ITEM_ACTION, actionMenuExit);
+MenuItem item7("Recalibrate", MENU_ITEM_ACTION, actionManuAs3935Recalibrate);
+MenuItem item8("Exit", MENU_ITEM_ACTION, actionMenuExit);
 
 MenuItem *mainMenuItems[] = {
-    &item1, &item2, &item3, &item4, &item5, &item6, &item7, &item8, &item9
+    &item0, &item1, &item2, &item3, &item4, &item5, &item6, &item7, &item8
 };
 
 const int numberOfMenuItems = sizeof(mainMenuItems) / sizeof(mainMenuItems[0]);

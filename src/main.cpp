@@ -1,12 +1,31 @@
+#include "ButtonInterface.h"
 #include <AS3935.h>
 #include <Adafruit_BMP280.h>
 #include <Adafruit_GFX.h>
 #include <Arduino.h>
 #include <Thinary_AHT10.h>
-
 #include <Wire.h>
-#include <keypad.h>
 #include <main.h>
+
+#include "AdafruitDisplayAdapter.h"
+#include "Stm32EncoderButtonAdapter.h"
+
+ButtonInterface *buttonInterface =
+    new AnalogButtonAdapter(KEYPAD_PIN, buttonThresholds,
+                            sizeof(buttonThresholds) / sizeof(buttonThresholds[0]), 20);
+
+// new AnalogButtonAdapter(KEYPAD_PIN, buttonThresholds, sizeof(buttonThresholds) /
+// sizeof(buttonThresholds[0]), 20);
+
+// Define encoder pins and button pin
+#define ENCODER_PIN_A 2
+#define ENCODER_PIN_B 3
+#define ENCODER_BUTTON_PIN 4
+// new Stm32EncoderButtonAdapter(ENCODER_PIN_A, ENCODER_PIN_B, ENCODER_BUTTON_PIN);
+
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+AdafruitDisplayAdapter displayAdapter(display);
+MenuManager menuManager(displayAdapter, &mainMenu, buttonInterface);
 
 void handleLightning();
 volatile int AS3935IrqTriggered = 0;
@@ -54,11 +73,13 @@ void handleError(const char *errorMessage)
 {
     SerialUSB.println(errorMessage);
     displayMessage(errorMessage);
-    // Additional error handling actions can be added here, such as logging or triggering an error
+    // Additional error handling actions can be added here, such as
+    // logging or triggering an error
 
     while (1)
     {
-        // Optionally blink an LED or do something to indicate an error state
+        // Optionally blink an LED or do something to indicate an error
+        // state
         digitalWrite(LED_PIN, LOW); // Turn the LED on
         delay(500);
         digitalWrite(LED_PIN, HIGH); // Turn the LED off
@@ -88,8 +109,9 @@ void printAtmosphereData(const Atmosphere &data)
     dtostrf(data.altitude, 6, 2, altitudeStr);
 
     snprintf(buffer, sizeof(buffer),
-             "Temp:%s C\nDew Point:%s C\nHumidity:%s %%\nPressure:%s Pa\nAltitude:%s m\n", tempStr,
-             dewPointStr, humidityStr, pressureStr, altitudeStr);
+             "Temp:%s C\nDew Point:%s C\nHumidity:%s %%\nPressure:%s "
+             "Pa\nAltitude:%s m\n",
+             tempStr, dewPointStr, humidityStr, pressureStr, altitudeStr);
     Serial.print(buffer);
 
     displayMessage(buffer);
@@ -201,13 +223,15 @@ void setup()
     scanI2CDevices();
     delay(2000);
 
-    menuManager.updateMenu(); // Initialize the menu manager with the root menu
+    menuManager.updateMenu(); // Initialize the menu manager with the
+                              // root menu
 }
 
 void handleNoiseInterrupt(int index)
 {
     spikeArray[index].noise++;
-    // SerialUSB.println("Noise level too high, try adjusting noise floor");
+    // SerialUSB.println("Noise level too high, try adjusting noise
+    // floor");
 }
 
 void handleDisturberInterrupt(int index)
@@ -292,7 +316,7 @@ void loop()
 
     if (currentTime - lastButtonReadTime >= 200)
     {
-        Button pressedButton = getPressedButton();
+        Button pressedButton = buttonInterface->getPressedButton();
 
         if ((pressedButton == BUTTON_UP) && (activateMenuMode == false))
             showAtmosphereData = true;
@@ -415,7 +439,8 @@ void updateDisplay()
     }
     displayAdapter.display();
 
-    SerialUSB.print("{\"histogram\":{"); // Print histogram data to Serial in JSON format
+    SerialUSB.print("{\"histogram\":{"); // Print histogram data to
+                                         // Serial in JSON format
     for (int i = 0; i < 4; i++)
     {
         SerialUSB.print("\"row");

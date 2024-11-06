@@ -1,21 +1,27 @@
 #include "MenuManager.h"
 #include "Parameter.h"
-MenuManager::MenuManager(DisplayInterface &display, Menu *rootMenu)
-    : display(display), currentMenu(rootMenu), currentIndex(0)
+MenuManager::MenuManager(DisplayInterface &display, Menu *menu, ButtonInterface *buttonInterface)
+    : display(display),
+      currentMenu(menu),
+      buttonInterface(buttonInterface),
+      currentIndex(0),
+      currentScale(1)
 {
 }
 
 void MenuManager::waitTillButtonReleased(Button bt)
 {
-    while (getPressedButton() == bt)
-        delay(10); // Debounce delay
+    while (buttonInterface->getPressedButton() == bt)
+        delay(10);
 }
 
 Button MenuManager::debounceButton()
 {
-    Button lastButton = getPressedButton();
-    delay(50); // Short delay for debounce
-    if (lastButton == getPressedButton())
+    Button lastButton =
+        buttonInterface->getPressedButton(); // Use buttonInterface->getPressedButton()
+    delay(50);                               // Short delay for debounce
+    if (lastButton ==
+        buttonInterface->getPressedButton()) // Use buttonInterface->getPressedButton()
         return lastButton;
     return BUTTON_NONE;
 }

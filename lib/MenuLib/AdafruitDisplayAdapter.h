@@ -1,3 +1,4 @@
+#pragma once
 // SSD1306_DisplayAdapter.h
 #include "DisplayInterface.h"
 #include <Adafruit_SSD1306.h>

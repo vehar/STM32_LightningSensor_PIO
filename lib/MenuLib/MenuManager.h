@@ -1,15 +1,15 @@
 #ifndef MENUMANAGER_H
 #define MENUMANAGER_H
 
+#include "ButtonInterface.h"
 #include "DisplayInterface.h"
 #include "Menu.h"
 #include <Arduino.h>
-#include <keypad.h>
 
 class MenuManager
 {
 public:
-    MenuManager(DisplayInterface &display, Menu *rootMenu);
+    MenuManager(DisplayInterface &display, Menu *menu, ButtonInterface *buttonInterface);
     void waitTillButtonReleased(Button bt);
     void switchScale();
     void handleInput(Button button);
@@ -17,6 +17,8 @@ public:
 
 private:
     DisplayInterface &display;
+    ButtonInterface *buttonInterface;
+
     Menu *currentMenu;
     int currentIndex;
     int topIndex;

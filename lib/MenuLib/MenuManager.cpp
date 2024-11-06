@@ -32,10 +32,14 @@ void MenuManager::displayText(const char *text) { display.print(text); }
 void MenuManager::displayParameterDetails(Parameter *parameter)
 {
     clearAndSetupDisplay(2);
-    displayText("SET\n");
+    displayText("SET x");
+    display.print(currentScale);
+    displayText("\n\n");
+
     displayText(parameter->getName());
     displayText("\n=  ");
     display.print(parameter->getValue()); // Display parameter value
+
     display.display();
 }
 
@@ -122,12 +126,7 @@ void MenuManager::displayParameter(Parameter *parameter)
     while (tuneFlag)
     {
         displayParameterDetails(parameter);
-
         // Display the current scale on a specific part of the screen
-        display.setCursor(0, 40);
-        display.print("Scale: x");
-        display.print(currentScale);
-        display.display();
 
         Button bt = debounceButton();
         switch (bt)
@@ -137,7 +136,6 @@ void MenuManager::displayParameter(Parameter *parameter)
             parameter->decrement(currentScale);
             break;
 
-        case BUTTON_RIGHT:
         case BUTTON_UP:
             parameter->increment(currentScale);
             break;
@@ -146,7 +144,7 @@ void MenuManager::displayParameter(Parameter *parameter)
             tuneFlag = false; // Exit adjustment mode
             break;
 
-        case BUTTON_SCALE: // A new button (e.g., long press or other) to switch scales
+        case BUTTON_RIGHT: // A new button (e.g., long press or other) to switch scales
             switchScale(); // Switch to the next scale
             break;
 
